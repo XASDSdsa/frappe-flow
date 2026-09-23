@@ -215,17 +215,20 @@
 				};
 				s.phase = "connecting";
 				s.socket = new WebSocket(auth.url);
+				s.socket.onopen = () => {
+					if (this.session !== s) return;
+					s.timers.forEach(clearTimeout); s.timers = [];
+					s.phase = "recording";
+					s.node.port.postMessage({ type: "start" });
+					s.timers.push(setTimeout(() => { if (this.session === s) this.finish(); }, Math.min(auth.max_seconds || 60, 60) * 1000));
+					this.showPhase();
+				};
 				s.socket.onmessage = ({ data }) => {
 					if (this.session !== s) return;
 					let message;
 					try { message = JSON.parse(data); } catch (_) { this.fail(s, "语音服务返回了无法识别的结果，请重新录音。"); return; }
 					if (Number(message.code || 0) !== 0) {
 						this.fail(s, errors[message.code] || `语音识别服务暂时不可用（${Number(message.code)}），请稍后重试。`); return;
-					}
-					if (s.phase === "connecting") {
-						s.timers.forEach(clearTimeout); s.timers = [];
-						s.phase = "recording"; s.node.port.postMessage({ type: "start" }); this.showPhase();
-					s.timers.push(setTimeout(() => { if (this.session === s) this.finish(); }, Math.min(auth.max_seconds || 60, 60) * 1000));
 					}
 					const previousText = s.transcript.text;
 					const text = s.transcript.add(message);

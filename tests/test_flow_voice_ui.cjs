@@ -141,6 +141,7 @@ async function harness(options = {}) {
     constructor(url) { this.url = url; this.readyState = 0; this.bufferedAmount = 0; this.sent = []; sockets.push(this); }
     send(value) { this.sent.push(value); }
     close() { this.closed = true; this.readyState = 3; }
+    open() { this.readyState = 1; this.onopen?.(); }
     emit(value) { this.readyState = 1; this.onmessage?.({ data: JSON.stringify(value) }); }
   }
   const window = new Target();
@@ -176,7 +177,7 @@ async function harness(options = {}) {
     get mediaCalls() { return mediaCalls; }, get submitted() { return submitted; },
     cancel() { click(status.querySelector('button')); },
     async start() { click(button); await settle(); },
-    async record() { await api.start(); sockets.at(-1).emit({ code: 0 }); },
+    async record() { await api.start(); sockets.at(-1).open(); await settle(); },
     result(text, type = 0) { sockets.at(-1).emit({ code: 0, data: { status: type === 1 ? 2 : 1, result: { sn: 1, ws: [{ cw: [{ w: text }] }] } } }); },
     key(key) { input.dispatchEvent(new UIEvent('keydown', { bubbles: true, key })); },
   };
@@ -203,6 +204,18 @@ test('interim text replaces the original selection; cancel restores the entire o
   assert.equal(h.input.value, '前缀选中后缀');
   assert.ok(h.track.stops > 0); assertReleased(h);
   assert.equal(h.submitted, 0);
+});
+
+test('socket open starts capture and permits the first audio frame without a server message', async () => {
+  const h = await harness(); await h.start();
+  h.sockets[0].open();
+  assert.deepEqual(h.nodes[0].commands, ['start']);
+  h.nodes[0].emit({ type: 'audio', buffer: new ArrayBuffer(20) });
+  const first = JSON.parse(h.sockets[0].sent[0]);
+  assert.equal(first.common.app_id, 'IFLYTEKAPP');
+  assert.equal(first.business.language, 'zh_cn');
+  assert.equal(first.data.status, 0);
+  h.cancel(); assertReleased(h);
 });
 
 test('finish flushes audio before end; final text stays in the draft without sending', async () => {
