@@ -1,0 +1,62 @@
+/* Fit the visible Safari viewport, including phone landscape and the keyboard. */
+@media (max-width: 768px), (max-width: 1024px) and (pointer: coarse) {
+	#flow-root {
+		top: var(--flow-mobile-viewport-top, 0px) !important;
+		bottom: auto !important;
+		right: 0 !important;
+		width: 100% !important;
+		height: var(--flow-mobile-viewport-height, 100dvh) !important;
+		max-height: var(--flow-mobile-viewport-height, 100dvh) !important;
+		overflow: hidden;
+	}
+
+	#flow-root .flow-panel {
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
+		height: 100% !important;
+		min-height: 0;
+		max-height: 100% !important;
+		overflow: hidden;
+		padding-left: env(safe-area-inset-left, 0px);
+		padding-right: env(safe-area-inset-right, 0px);
+	}
+
+	#flow-root .flow-panel > header {
+		flex-shrink: 0;
+		padding-top: max(8px, env(safe-area-inset-top, 0px));
+	}
+
+	#flow-root .flow-panel > .flow-scrollbar {
+		flex: 1 1 0;
+		min-height: 0;
+		overflow-y: auto;
+		overscroll-behavior-y: contain;
+		padding-bottom: 16px !important;
+	}
+
+	#flow-root .flow-composer {
+		position: relative !important;
+		inset: auto !important;
+		flex: 0 0 auto;
+		box-sizing: border-box;
+		width: calc(100% - 24px);
+		min-width: 0;
+		margin: 0 auto max(12px, env(safe-area-inset-bottom, 0px)) !important;
+		max-height: 55%;
+		/* Inline selector menus must extend above the composer without clipping. */
+		overflow: visible;
+		z-index: 1;
+	}
+
+	#flow-root .flow-composer textarea {
+		/* iOS zooms smaller inputs on focus, disturbing the viewport geometry. */
+		font-size: 16px !important;
+		max-height: min(160px, calc(var(--flow-mobile-viewport-height, 100dvh) * 0.3));
+	}
+
+	#flow-root .flow-composer > .flex.items-center {
+		min-width: 0;
+		flex-wrap: wrap;
+	}
+}

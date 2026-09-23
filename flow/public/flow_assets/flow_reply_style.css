@@ -1,0 +1,42 @@
+/* Native Markdown only: keep the renderer sanitizer and approval controls intact. */
+#flow-root .flow-parts > .md > blockquote {
+	box-sizing: border-box;
+	max-width: 100%;
+	margin: 8px 0 14px;
+	padding: 12px 14px;
+	border-left: 4px solid var(--blue-500, #2563eb);
+	border-radius: 0 8px 8px 0;
+	background: var(--subtle-accent, #eff6ff);
+	color: var(--ink-gray-9, #171717);
+	font-style: normal;
+	overflow-wrap: anywhere;
+}
+
+#flow-root .flow-parts > .md > blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+#flow-root .flow-parts > .md > blockquote strong {
+	color: var(--text-on-light-blue, #1e40af);
+	font-weight: 650;
+}
+
+#flow-root .flow-parts > .md > p > strong:only-child {
+	display: inline-block;
+	margin-top: 8px;
+	font-weight: 650;
+}
+
+#flow-root .flow-parts > .md > ul > li {
+	margin: 5px 0;
+}
+
+[data-theme="dark"] #flow-root .flow-parts > .md > blockquote {
+	background: #172b45;
+	color: #f3f4f6;
+	border-left-color: #60a5fa;
+}
+
+[data-theme="dark"] #flow-root .flow-parts > .md > blockquote strong {
+	color: #bfdbfe;
+}

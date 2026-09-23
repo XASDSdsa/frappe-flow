@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "creation": "2026-09-23 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["enabled", "section_credentials", "iflytek_app_id", "iflytek_api_key", "iflytek_api_secret", "section_recognition", "max_seconds", "hotwords"],
+ "fields": [
+  {"default": "0", "fieldname": "enabled", "fieldtype": "Check", "label": "启用 Flow 语音输入"},
+  {"fieldname": "section_credentials", "fieldtype": "Section Break", "label": "科大讯飞语音听写凭证", "description": "请在讯飞开放平台开通“语音听写（流式版）”，填写 AppID、APIKey、APISecret。APISecret 只在此管理表单填写，不会下发到浏览器。"},
+  {"fieldname": "iflytek_app_id", "fieldtype": "Data", "label": "科大讯飞 AppID", "length": 64},
+  {"fieldname": "iflytek_api_key", "fieldtype": "Data", "label": "科大讯飞 APIKey", "length": 128},
+  {"fieldname": "iflytek_api_secret", "fieldtype": "Password", "label": "科大讯飞 APISecret", "length": 128},
+  {"fieldname": "section_recognition", "fieldtype": "Section Break", "label": "识别设置"},
+  {"default": "60", "fieldname": "max_seconds", "fieldtype": "Int", "label": "单次录音时长（秒）", "description": "1 到 60 秒，默认 60 秒。科大讯飞语音听写流式接口单次最长 60 秒。"},
+  {"fieldname": "hotwords", "fieldtype": "Small Text", "label": "识别提示词", "description": "可选，每行一个，供客服维护常用台球、球杆、巧粉、贴纸和客户名称。当前接口使用日常中文识别，不会把提示词或业务数据发送到浏览器。"}
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Flow",
+ "name": "Flow Voice Settings",
+ "owner": "Administrator",
+ "permissions": [{"create": 1, "read": 1, "role": "System Manager", "write": 1}],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

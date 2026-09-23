@@ -23,8 +23,30 @@ def _flow_panel_asset(filename: str) -> str:
 	return f"/assets/flow/flow_panel/{filename}?v={version}"
 
 
-app_include_js = [_flow_panel_asset("flow_panel.js")]
-app_include_css = [_flow_panel_asset("flow_panel.css")]
+def _flow_static_asset(filename: str) -> str:
+	path = _os.path.join(_os.path.dirname(__file__), "public", "flow_assets", filename)
+	try:
+		version = int(_os.path.getmtime(path))
+	except OSError:
+		version = 0
+	return f"/assets/flow/flow_assets/{filename}?v={version}"
+
+
+app_include_js = [
+	_flow_panel_asset("flow_panel.js"),
+	_flow_static_asset("flow_panel_guard.js"),
+	_flow_static_asset("flow_mobile_viewport.js"),
+	_flow_static_asset("flow_image_paste.js"),
+	_flow_static_asset("flow_mobile_launcher.js"),
+	_flow_static_asset("flow_voice_core.js"),
+	_flow_static_asset("flow_voice.js"),
+]
+app_include_css = [
+	_flow_panel_asset("flow_panel.css"),
+	_flow_static_asset("flow_mobile.css"),
+	_flow_static_asset("flow_reply_style.css"),
+	_flow_static_asset("flow_voice.css"),
+]
 
 doc_events = {
 	"*": {
@@ -57,6 +79,26 @@ scheduler_events = {
 	},
 }
 
-after_migrate = ["flow.assistant.sync_builtin_assistant"]
+after_migrate = ["flow.assistant.sync_builtin_assistant", "flow.install.after_migrate"]
 
 extend_bootinfo = "flow.boot.boot_session"
+
+
+# Generic Flow runtime safeguards live in this app. SF keeps only its business tools.
+try:
+	from flow.compat import (
+		install_describe_compact,
+		install_model_compat,
+		install_persist_retry,
+		install_show_image_inject,
+		install_sse_flush,
+	)
+
+	install_model_compat()
+	install_sse_flush()
+	install_show_image_inject()
+	install_describe_compact()
+	install_persist_retry()
+except Exception:
+	# Frappe imports hooks while the app is being installed; defer until migrate.
+	pass

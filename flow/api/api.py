@@ -32,6 +32,16 @@ def start_run(
 		frappe.throw(_("Input is required."), title=_("Invalid Input"))
 
 	from flow.lib.session import load_session, new_session
+	if session:
+		# A browser can reconnect after a dropped SSE request. Recover only runs
+		# whose worker is no longer alive, then remove stale attachment rows.
+		try:
+			from flow.compat import _scrub_missing_session_files, unstick_session
+
+			unstick_session(session)
+			_scrub_missing_session_files(session)
+		except Exception:
+			frappe.log_error(title="Flow session recovery failed")
 
 	stream = _is_truthy(stream)
 	files = _parse_attachments(attachments)
@@ -86,19 +96,9 @@ def recover_session(session: str) -> dict[str, int]:
 	if not isinstance(session, str) or not session.strip():
 		frappe.throw(_("Session is required."), title=_("Invalid Session"))
 
-	from flow.lib.session import _assert_session_owner
+	from flow.compat import unstick_session
 
-	doc = frappe.get_doc("Flow Session", session.strip())
-	_assert_session_owner(doc)
-
-	abandoned = frappe.get_all("Flow Run", filters={"session": doc.name, "status": "Running"}, pluck="name")
-	for name in abandoned:
-		frappe.db.set_value(
-			"Flow Run",
-			name,
-			{"status": "Failed", "error": "Run abandoned: stream ended without completing."},
-		)
-	return {"recovered": len(abandoned)}
+	return unstick_session(session.strip())
 
 
 FEEDBACK_COMMENT_LIMIT = 500

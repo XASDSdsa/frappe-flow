@@ -1,0 +1,27 @@
+#flow-root .flow-voice-button {
+	display: inline-flex; align-items: center; justify-content: center;
+	width: 30px; height: 30px; flex: 0 0 30px; padding: 5px;
+	border: 0; border-radius: 6px; background: transparent;
+	color: var(--text-color, #525252); cursor: pointer;
+	touch-action: manipulation; user-select: none; -webkit-user-select: none;
+	-webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#flow-root .flow-voice-button svg { width: 18px; height: 18px; pointer-events: none; }
+#flow-root .flow-voice-button:hover { background: var(--subtle-fg, #f3f3f3); }
+#flow-root .flow-voice-button[aria-pressed="true"] {
+	background: #16a34a; color: #fff; border-radius: 999px;
+	box-shadow: 0 0 0 4px rgba(22,163,74,.18);
+}
+#flow-root .flow-voice-button:disabled { opacity: .4; cursor: default; }
+#flow-root .flow-voice-button:focus-visible { outline: 2px solid #2490ef; outline-offset: 2px; }
+#flow-root .flow-voice-status {
+	display: flex; align-items: center; gap: 7px; min-width: 0;
+	padding: 7px 5px; font-size: 12px; line-height: 1.5;
+	color: var(--text-color, #333); border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+#flow-root .flow-voice-status[hidden] { display: none !important; }
+#flow-root .flow-voice-message { flex: 1; min-width: 0; }
+#flow-root .flow-voice-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #dc2626; }
+#flow-root .flow-voice-cancel { flex: 0 0 auto; border: 0; background: transparent; color: #b91c1c; padding: 5px; cursor: pointer; }
+#flow-root .flow-voice-status.is-cancelling { color: #b91c1c; background: #fef2f2; }
+#flow-root .flow-voice-busy > .flex.items-center button:not(.flow-voice-button) { opacity: .4; }
