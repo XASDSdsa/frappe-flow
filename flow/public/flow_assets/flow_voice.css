@@ -23,5 +23,6 @@
 #flow-root .flow-voice-message { flex: 1; min-width: 0; }
 #flow-root .flow-voice-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #dc2626; }
 #flow-root .flow-voice-cancel { flex: 0 0 auto; border: 0; background: transparent; color: #b91c1c; padding: 5px; cursor: pointer; }
+#flow-root .flow-voice-cancel.is-cancelled { color: var(--text-muted, #9ca3af); cursor: default; }
 #flow-root .flow-voice-status.is-cancelling { color: #b91c1c; background: #fef2f2; }
 #flow-root .flow-voice-busy > .flex.items-center button:not(.flow-voice-button) { opacity: .4; }

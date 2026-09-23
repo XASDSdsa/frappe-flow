@@ -201,13 +201,13 @@ function assertReleased(h) {
   }
 }
 
-test('interim text replaces the original selection; cancel restores the entire original draft', async () => {
+test('interim text replaces the original selection; cancel keeps the recognized draft', async () => {
   const h = await harness({ draft: '前缀选中后缀', start: 2, end: 4 });
   await h.record();
-  h.result('你好'); assert.equal(h.input.value, '前缀你好后缀');
-  h.result('你好世界'); assert.equal(h.input.value, '前缀你好世界后缀');
-  h.cancel();
-  assert.equal(h.input.value, '前缀选中后缀');
+	h.result('你好'); assert.equal(h.input.value, '前缀你好后缀');
+	h.result('你好世界'); assert.equal(h.input.value, '前缀你好世界后缀');
+	h.cancel();
+	assert.equal(h.input.value, '前缀你好世界后缀');
   assert.ok(h.track.stops > 0); assertReleased(h);
   assert.equal(h.submitted, 0);
 });
@@ -275,7 +275,7 @@ test('Escape, page hiding, and document hiding cancel and release recording reso
   for (const cancel of [h => h.key('Escape'), h => h.window.dispatchEvent(new UIEvent('pagehide')),
     h => { h.document.hidden = true; h.document.dispatchEvent(new UIEvent('visibilitychange')); }]) {
     const h = await harness(); await h.record(); h.result('临时文本'); cancel(h);
-    assert.equal(h.input.value, '原草稿'); assertReleased(h); assert.ok(h.track.stops > 0);
+    assert.equal(h.input.value, '原草稿临时文本'); assertReleased(h); assert.ok(h.track.stops > 0);
   }
 });
 
@@ -300,8 +300,17 @@ test('second microphone click while finalizing cancels immediately without timeo
   assert.ok([...h.timers.values()].some(entry => entry.delay === 8000));
   h.click(h.button);
   assertReleased(h);
-  assert.equal(h.input.value, '原草稿');
+	assert.equal(h.input.value, '原草稿识别中');
   assert.equal(h.notices.some(entry => /最后一段识别超时/.test(entry.message)), false);
+});
+
+test('cancel button stops immediately, turns gray, and keeps recognized text', async () => {
+  const h = await harness(); await h.record(); h.result('已识别');
+  h.cancel();
+  assert.equal(h.input.value, '原草稿已识别');
+  assert.equal(h.status.hidden, true);
+  assert.equal(h.button.attributes['aria-pressed'], 'false');
+  assertReleased(h);
 });
 
 test('external draft changes are preserved and stop recognition', async () => {

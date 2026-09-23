@@ -97,7 +97,13 @@
 					else if (["preparing", "finishing"].includes(this.session.phase)) this.cancel();
 				} else this.begin({});
 			});
-			listen(this.cancelButton, "click", () => this.cancel());
+			listen(this.cancelButton, "click", () => {
+				// Cancellation is immediate and keeps whatever has already been
+				// recognized in the composer.  Gray the control while cleanup runs.
+				this.cancelButton.disabled = true;
+				this.cancelButton.classList.add("is-cancelled");
+				this.cancel();
+			});
 			listen(composer, "click", (event) => {
 				if (this.session && !this.button.contains(event.target) && !this.cancelButton.contains(event.target)) {
 					event.preventDefault(); event.stopImmediatePropagation();
@@ -149,6 +155,8 @@
 				transcript: new window.LeyaFlowVoiceCore.Transcript(), timers: [], ended: false, endSent: false };
 			this.input.readOnly = true;
 			this.status.hidden = false;
+			this.cancelButton.disabled = false;
+			this.cancelButton.classList.remove("is-cancelled");
 			this.composer.classList.add("flow-voice-busy");
 			this.button.setAttribute("aria-pressed", "true");
 			this.button.setAttribute("aria-label", "关闭语音输入");
@@ -257,10 +265,6 @@
 		cancel() {
 			const s = this.session;
 			if (!s) return;
-			if (this.input.value === s.written) {
-				this.input.value = s.before;
-				this.input.dispatchEvent(new Event("input", { bubbles: true }));
-			}
 			this.cleanup(s);
 		}
 		fail(s, message) {
