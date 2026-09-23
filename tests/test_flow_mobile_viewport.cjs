@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, '../flow/public/flow_assets/flow_mobile_viewport.js'), 'utf8');
+function harness(withViewport = true) {
+  const listeners = {}, values = {}, frames = [];
+  const target = prefix => ({addEventListener: (name, fn) => {listeners[prefix + name] = fn;}});
+  const viewport = Object.assign(target('v:'), {height: 700, offsetTop: 0, scale: 1});
+  const window = Object.assign(target('w:'), {innerHeight: 850, visualViewport: withViewport ? viewport : undefined});
+  const document = Object.assign(target('d:'), {documentElement: {style: {setProperty: (k, v) => {values[k] = v;}}}});
+  const context = vm.createContext({window, document, requestAnimationFrame: fn => (frames.push(fn), frames.length), Math, Number});
+  vm.runInContext(source, context);
+  const fire = key => {listeners[key](); while(frames.length) frames.shift()();};
+  return {viewport, window, values, fire, context};
+}
+const h = harness();
+assert.equal(h.values['--flow-mobile-viewport-height'], '700px');
+h.viewport.height = 390; h.viewport.offsetTop = 90; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '390px');
+assert.equal(h.values['--flow-mobile-viewport-top'], '90px');
+h.viewport.height = 780; h.viewport.offsetTop = 0; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '780px');
+assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
+h.window.innerHeight = 430; h.viewport.height = 430; h.fire('w:orientationchange');
+assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
+h.viewport.scale = 2; h.viewport.height = 215; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
+h.viewport.scale = 1; h.viewport.height = 0; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
+const fallback = harness(false);
+assert.equal(fallback.values['--flow-mobile-viewport-height'], '850px');
+fallback.window.innerHeight = 600; fallback.fire('w:resize');
+assert.equal(fallback.values['--flow-mobile-viewport-height'], '600px');
+vm.runInContext(source, fallback.context);
+console.log('Mobile viewport: toolbar, keyboard offset/recovery, rotation, zoom, fallback and duplicate loading passed.');
