@@ -19,6 +19,8 @@
 
 		add(message) {
 			if (!message || typeof message !== "object") return this.text;
+			const rtasr = this._addRtasr(message);
+			if (rtasr) return this.text;
 			const iflytek = message.data && typeof message.data === "object" ? message.data : null;
 			const iflytekResult = iflytek?.result;
 			if (iflytekResult && Array.isArray(iflytekResult.ws)) {
@@ -43,6 +45,23 @@
 				}
 			}
 			return this.text;
+		}
+
+		_addRtasr(message) {
+			if (message.action !== "result" || Number(message.code || 0) !== 0) return false;
+			let data = message.data;
+			if (typeof data === "string") {
+				try { data = JSON.parse(data); } catch (_) { return true; }
+			}
+			const state = data?.cn?.st;
+			if (!state || !Array.isArray(state.rt)) return true;
+			const text = state.rt.flatMap((segment) => segment?.ws || [])
+				.flatMap((word) => word?.cw || [])
+				.map((candidate) => candidate?.w || "")
+				.join("");
+			const id = data.seg_id ?? data.segId ?? data.segment_id;
+			this.update(id, text, Number(state.type) === 0);
+			return true;
 		}
 
 		update(id, text, final) {

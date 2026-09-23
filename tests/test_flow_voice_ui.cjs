@@ -156,7 +156,7 @@ async function harness(options = {}) {
     fetch(url, request) {
       requests.push({ url, ...request });
       const value = url.endsWith('get_config') ? (options.config || { enabled: true })
-        : (options.auth?.promise || { url: 'wss://iat-api.xfyun.cn/v2/iat?authorization=test', app_id: 'IFLYTEKAPP', max_seconds: 60 });
+        : (options.auth?.promise || { url: 'wss://rtasr.xfyun.cn/v1/ws?appid=IFLYTEKAPP&ts=1&signa=test&lang=cn', app_id: 'IFLYTEKAPP', max_seconds: 60 });
       return Promise.resolve(value).then(message => ({ ok: true, json: async () => ({ message }) }));
     },
     MutationObserver: class {
@@ -178,7 +178,13 @@ async function harness(options = {}) {
     cancel() { click(status.querySelector('button')); },
     async start() { click(button); await settle(); },
     async record() { await api.start(); sockets.at(-1).open(); await settle(); },
-    result(text, type = 0) { sockets.at(-1).emit({ code: 0, data: { status: type === 1 ? 2 : 1, result: { sn: 1, ws: [{ cw: [{ w: text }] }] } } }); },
+    // RTASR wraps the transcript as a JSON string in data. type=1 is interim;
+    // type=0 is final for a segment. Keep a stable segment id so interim text
+    // replaces itself before the final result arrives.
+    result(text, type = 1, segId = 0) {
+      sockets.at(-1).emit({ action: 'result', code: 0,
+        data: JSON.stringify({ seg_id: segId, cn: { st: { type, rt: [{ ws: [{ cw: [{ w: text }] }] }] } } }) });
+    },
     key(key) { input.dispatchEvent(new UIEvent('keydown', { bubbles: true, key })); },
   };
   return api;
@@ -211,10 +217,8 @@ test('socket open starts capture and permits the first audio frame without a ser
   h.sockets[0].open();
   assert.deepEqual(h.nodes[0].commands, ['start']);
   h.nodes[0].emit({ type: 'audio', buffer: new ArrayBuffer(20) });
-  const first = JSON.parse(h.sockets[0].sent[0]);
-  assert.equal(first.common.app_id, 'IFLYTEKAPP');
-  assert.equal(first.business.language, 'zh_cn');
-  assert.equal(first.data.status, 0);
+  assert.equal(h.sockets[0].sent.length, 1);
+  assert.equal(new Uint8Array(h.sockets[0].sent[0]).byteLength, 20);
   h.cancel(); assertReleased(h);
 });
 
@@ -227,12 +231,10 @@ test('finish flushes audio before end; final text stays in the draft without sen
   assert.equal(h.sockets[0].sent.length, 0);
   const audio = new ArrayBuffer(20); h.nodes[0].emit({ type: 'audio', buffer: audio });
   h.nodes[0].emit({ type: 'flushed' });
-  const first = JSON.parse(h.sockets[0].sent[0]);
-  assert.equal(first.common.app_id, 'IFLYTEKAPP');
-  assert.equal(first.data.status, 0);
-  assert.equal(first.data.audio.length > 0, true);
-  assert.deepEqual(JSON.parse(h.sockets[0].sent[1]), { data: { status: 2 } });
-  h.result('识别完成。', 1);
+  assert.equal(new Uint8Array(h.sockets[0].sent[0]).byteLength, 20);
+  assert.equal(new TextDecoder().decode(h.sockets[0].sent[1]), '{"end":true}');
+  h.result('识别完成。', 0);
+  h.sockets[0].onclose();
   assert.equal(h.input.value, '原草稿识别完成。');
   assertReleased(h); assert.equal(h.submitted, 0);
 });
@@ -256,7 +258,7 @@ test('cancel aborts signing and ignores a late signing response', async () => {
   const signing = h.requests.find(request => request.url.endsWith('create_session'));
   assert.equal(signing.method, 'POST'); assert.equal(signing.headers['X-Frappe-CSRF-Token'], 'test-csrf');
   assert.equal(signing.signal.aborted, true); assertReleased(h);
-  auth.resolve({ url: 'wss://iat-api.xfyun.cn/v2/iat?authorization=late', app_id: 'IFLYTEKAPP' }); await settle();
+  auth.resolve({ url: 'wss://rtasr.xfyun.cn/v1/ws?appid=IFLYTEKAPP&ts=1&signa=late&lang=cn', app_id: 'IFLYTEKAPP' }); await settle();
   assert.equal(h.sockets.length, 0); assert.ok(h.track.stops > 0);
 });
 

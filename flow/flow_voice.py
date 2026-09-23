@@ -1,12 +1,11 @@
-"""Authenticated, short-lived iFlytek streaming ASR sessions for the Flow composer."""
+"""Authenticated iFlytek RTASR streaming sessions for the Flow composer."""
 
 import base64
-import email.utils
 import hashlib
 import hmac
 import time
 import uuid
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 import frappe
 from frappe import _
@@ -17,8 +16,8 @@ from flow.flow.doctype.flow_voice_settings.flow_voice_settings import (
 )
 
 SETTINGS_DOCTYPE = "Flow Voice Settings"
-ASR_HOST = "iat-api.xfyun.cn"
-ASR_PATH = "/v2/iat"
+ASR_HOST = "rtasr.xfyun.cn"
+ASR_PATH = "/v1/ws"
 SESSION_LIMITS = ((60, 10), (3600, 120))
 
 # RedisWrapper.eval is inherited from redis.Redis; make_key supplies the site's
@@ -63,9 +62,6 @@ def _configuration_state():
 			return state
 		try:
 			config = normalize_settings(settings)
-			if not (settings.get_password("iflytek_api_secret", raise_exception=False) or "").strip():
-				state["reason"] = "not_configured"
-				return state
 		except Exception:
 			state["reason"] = "not_configured"
 			return state
@@ -107,19 +103,14 @@ def _enforce_session_limit():
 		frappe.throw(_("语音使用过于频繁，请稍后重试。"), frappe.TooManyRequestsError)
 
 
-def _signed_url(config, api_secret, *, timestamp=None):
-	date = email.utils.formatdate(timestamp or time.time(), usegmt=True)
-	request_line = f"GET {ASR_PATH} HTTP/1.1"
-	signature_origin = f"host: {ASR_HOST}\ndate: {date}\n{request_line}"
-	signature = base64.b64encode(
-		hmac.new(api_secret.encode("utf-8"), signature_origin.encode("utf-8"), hashlib.sha256).digest()
+def _signed_url(config, *, timestamp=None):
+	"""Build the RTASR URL using the product's appid+ts HMAC-SHA1 signature."""
+	ts = str(int(timestamp if timestamp is not None else time.time()))
+	md5 = hashlib.md5(f'{config["app_id"]}{ts}'.encode("utf-8")).hexdigest()
+	signa = base64.b64encode(
+		hmac.new(config["api_key"].encode("utf-8"), md5.encode("utf-8"), hashlib.sha1).digest()
 	).decode("ascii")
-	authorization_origin = (
-		f'api_key="{config["api_key"]}", algorithm="hmac-sha256", '
-		f'headers="host date request-line", signature="{signature}"'
-	)
-	authorization = base64.b64encode(authorization_origin.encode("utf-8")).decode("ascii")
-	query = urlencode({"authorization": authorization, "date": date, "host": ASR_HOST}, quote_via=quote)
+	query = urlencode({"appid": config["app_id"], "ts": ts, "signa": signa, "lang": "cn"})
 	return f"wss://{ASR_HOST}{ASR_PATH}?{query}"
 
 
@@ -130,17 +121,15 @@ def _session_details():
 		if not settings.enabled:
 			return None
 		config = normalize_settings(settings)
-		api_secret = settings.get_password("iflytek_api_secret", raise_exception=False)
-		if not api_secret or not api_secret.strip():
-			return None
 		voice_id = str(uuid.uuid4())
 		return {
-			"url": _signed_url(config, api_secret),
-			"provider": "iflytek",
+			"url": _signed_url(config),
+			"provider": "iflytek-rtasr",
 			"app_id": config["app_id"],
 			"voice_id": voice_id,
 			"max_seconds": config["max_seconds"],
 			"sample_rate": 16000,
+			"audio_format": "pcm_s16le",
 		}
 	except Exception:
 		return None

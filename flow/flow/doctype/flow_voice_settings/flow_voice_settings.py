@@ -8,7 +8,9 @@ from frappe import _
 from frappe.model.document import Document
 
 DEFAULT_MAX_SECONDS = 60
-MAX_SECONDS = 60
+# RTASR itself supports long-lived streams. Flow still keeps a configurable
+# safety cap so a forgotten microphone cannot create an unbounded paid session.
+MAX_SECONDS = 600
 DEFAULT_HOTWORDS = ("台球", "球杆", "皮头", "先角", "巧粉", "贴纸", "标签")
 _HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U000323af]")
 
@@ -44,9 +46,9 @@ def normalize_settings(settings):
 	if seconds is None or seconds == "":
 		seconds = DEFAULT_MAX_SECONDS
 	if not re.fullmatch(r"[0-9]+", str(seconds)) or not 1 <= int(seconds) <= MAX_SECONDS:
-		raise ValueError("单次录音时长必须为 1 到 60 秒的整数。")
+		raise ValueError(f"单次录音时长必须为 1 到 {MAX_SECONDS} 秒的整数。")
 	if settings.get("enabled") and (not app_id or not api_key):
-		raise ValueError("启用语音输入前，请填写科大讯飞 AppID、APIKey 和 APISecret。")
+		raise ValueError("启用语音输入前，请填写科大讯飞实时转写 AppID 和 APIKey。")
 	return {
 		"app_id": app_id,
 		"api_key": api_key,
@@ -64,10 +66,3 @@ class FlowVoiceSettings(Document):
 		self.iflytek_app_id = config["app_id"]
 		self.iflytek_api_key = config["api_key"]
 		self.max_seconds = config["max_seconds"]
-		if self.enabled:
-			try:
-				available = bool((self.get_password("iflytek_api_secret", raise_exception=False) or "").strip())
-			except Exception:
-				available = False
-			if not available:
-				frappe.throw(_("启用语音输入前，请填写有效的科大讯飞 APISecret。"))

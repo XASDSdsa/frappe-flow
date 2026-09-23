@@ -3,16 +3,16 @@
  "creation": "2026-09-23 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["enabled", "section_credentials", "iflytek_app_id", "iflytek_api_key", "iflytek_api_secret", "section_recognition", "max_seconds", "hotwords"],
+ "field_order": ["enabled", "section_credentials", "iflytek_app_id", "iflytek_api_key", "section_recognition", "max_seconds", "hotwords"],
  "fields": [
   {"default": "0", "fieldname": "enabled", "fieldtype": "Check", "label": "启用 Flow 语音输入"},
-  {"fieldname": "section_credentials", "fieldtype": "Section Break", "label": "科大讯飞语音听写凭证", "description": "请在讯飞开放平台开通“语音听写（流式版）”，填写 AppID、APIKey、APISecret。APISecret 只在此管理表单填写，不会下发到浏览器。"},
-  {"fieldname": "iflytek_app_id", "fieldtype": "Data", "label": "科大讯飞 AppID", "length": 64},
-  {"fieldname": "iflytek_api_key", "fieldtype": "Data", "label": "科大讯飞 APIKey", "length": 128},
-  {"fieldname": "iflytek_api_secret", "fieldtype": "Password", "label": "科大讯飞 APISecret", "length": 128},
+  {"fieldname": "section_credentials", "fieldtype": "Section Break", "label": "科大讯飞实时语音转写标准版凭证", "description": "请在讯飞开放平台开通“实时语音转写（标准版）”，填写 AppID 和 APIKey。该版本通过 AppID、时间戳和 APIKey 签名连接，不使用旧版 APISecret。"},
+  {"fieldname": "iflytek_app_id", "fieldtype": "Data", "label": "科大讯飞 AppID", "length": 64, "description": "实时语音转写标准版页面显示的 AppID。"},
+  {"fieldname": "iflytek_api_key", "fieldtype": "Data", "label": "科大讯飞 APIKey", "length": 128, "description": "实时语音转写标准版页面显示的 APIKey。"},
+  {"fieldname": "iflytek_api_secret", "fieldtype": "Password", "label": "旧版 APISecret（已停用）", "length": 128, "hidden": 1, "read_only": 1, "description": "仅保留旧数据兼容，不再读取。"},
   {"fieldname": "section_recognition", "fieldtype": "Section Break", "label": "识别设置"},
-  {"default": "60", "fieldname": "max_seconds", "fieldtype": "Int", "label": "单次录音时长（秒）", "description": "1 到 60 秒，默认 60 秒。科大讯飞语音听写流式接口单次最长 60 秒。"},
-  {"fieldname": "hotwords", "fieldtype": "Small Text", "label": "识别提示词", "description": "可选，每行一个，供客服维护常用台球、球杆、巧粉、贴纸和客户名称。当前接口使用日常中文识别，不会把提示词或业务数据发送到浏览器。"}
+  {"default": "60", "fieldname": "max_seconds", "fieldtype": "Int", "label": "单次录音安全上限（秒）", "description": "1 到 600 秒，默认 60 秒。实时语音转写支持持续流式识别；此处仅用于防止忘记关闭麦克风。"},
+  {"fieldname": "hotwords", "fieldtype": "Small Text", "label": "识别提示词", "description": "可选，每行一个，作为 Flow 内置识别词库维护；实时转写标准版当前只接受官方连接参数，不会把业务数据拼进鉴权 URL。"}
  ],
  "issingle": 1,
  "links": [],

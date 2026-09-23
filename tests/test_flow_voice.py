@@ -3,6 +3,9 @@
 import importlib.util
 import inspect
 import json
+import base64
+import hashlib
+import hmac
 import sys
 import types
 from pathlib import Path
@@ -75,37 +78,40 @@ def env(monkeypatch):
 	settings = settings_module.FlowVoiceSettings(
 		enabled=1, iflytek_app_id="1250000000", iflytek_api_key="APIKEYEXAMPLE", max_seconds=60, hotwords="",
 	)
-	settings.get_password = Mock(return_value="test-only-secret")
+	settings.get_password = Mock(return_value="legacy-secret")
 	f.get_single = Mock(return_value=settings)
 	return types.SimpleNamespace(f=f, backend=backend, settings=settings, settings_module=settings_module)
 
 
-def test_fixed_signature_matches_independent_openssl_fixture(env):
-	# Expected digest produced independently with HMAC-SHA256 over the
-	# RFC1123 date, host and request line required by iFlytek.
+def test_rtasr_signature_matches_official_formula_without_exposing_key(env):
+	# RTASR signs hexadecimal MD5(appid + ts) with HMAC-SHA1(apiKey),
+	# then base64 encodes the digest. Keep this independent of the backend.
 	url = env.backend._signed_url(
-		{"app_id": "1250000000", "api_key": "APIKEYEXAMPLE"},
-		"test-only-secret", timestamp=1700000000,
+		{"app_id": "1250000000", "api_key": "APIKEYEXAMPLE"}, timestamp=1700000000,
 	)
 	query = parse_qs(urlsplit(url).query)
-	assert query["host"] == ["iat-api.xfyun.cn"]
-	assert query["date"] == ["Tue, 14 Nov 2023 22:13:20 GMT"]
-	assert query["authorization"] == ["YXBpX2tleT0iQVBJS0VZRVhBTVBMRSIsIGFsZ29yaXRobT0iaG1hYy1zaGEyNTYiLCBoZWFkZXJzPSJob3N0IGRhdGUgcmVxdWVzdC1saW5lIiwgc2lnbmF0dXJlPSJ0Rko0VWxjRkIvR1plVm9wMFBnVHFlSzRxT0w5VklneXpLYmp0TXNraU84PSI="]
-	assert "test-only-secret" not in url
+	assert query["appid"] == ["1250000000"]
+	assert query["ts"] == ["1700000000"]
+	md5 = hashlib.md5(b"12500000001700000000").hexdigest()
+	expected = base64.b64encode(hmac.new(b"APIKEYEXAMPLE", md5.encode(), hashlib.sha1).digest()).decode()
+	assert query["signa"] == [expected]
+	assert query["lang"] == ["cn"]
+	assert "APIKEYEXAMPLE" not in url
 
 
 def test_session_returns_fixed_endpoint_and_audio_contract(env):
 	result = env.backend.create_session()
-	assert set(result) == {"url", "provider", "app_id", "voice_id", "max_seconds", "sample_rate"}
+	assert set(result) == {"url", "provider", "app_id", "voice_id", "max_seconds", "sample_rate", "audio_format"}
 	assert result["max_seconds"] == 60 and result["sample_rate"] == 16000
+	assert result["audio_format"] == "pcm_s16le"
 	url = urlsplit(result["url"])
-	assert url.scheme == "wss" and url.netloc == "iat-api.xfyun.cn"
-	assert url.path == "/v2/iat"
+	assert url.scheme == "wss" and url.netloc == "rtasr.xfyun.cn"
+	assert url.path == "/v1/ws"
 	query = parse_qs(url.query)
-	assert query["host"] == ["iat-api.xfyun.cn"]
-	assert query["authorization"] and query["date"]
+	assert query["appid"] == ["1250000000"]
+	assert query["ts"] and query["signa"] and query["lang"] == ["cn"]
 	assert "APIKEYEXAMPLE" not in result["url"]
-	assert result["provider"] == "iflytek" and result["app_id"] == "1250000000"
+	assert result["provider"] == "iflytek-rtasr" and result["app_id"] == "1250000000"
 	assert env.f.local.response_headers["Cache-Control"] == "no-store"
 	assert env.backend.create_session()["voice_id"] != result["voice_id"]
 
@@ -158,15 +164,15 @@ def test_unconfigured_and_unavailable_status_is_safe(env, case, reason):
 	if case == "disabled":
 		env.settings.enabled = 0
 	elif case == "key_missing":
-		env.settings.get_password.return_value = None
+		env.settings.iflytek_api_key = ""
 	elif case == "key_blank":
-		env.settings.get_password.return_value = "   "
+		env.settings.iflytek_api_key = "   "
 	elif case == "key_unreadable":
-		env.settings.get_password.side_effect = RuntimeError("sensitive detail")
+		env.settings.iflytek_api_key = "bad key!"
 	elif case == "bad_id":
 		env.settings.iflytek_app_id = "../arbitrary"
 	elif case == "bad_duration":
-		env.settings.max_seconds = 1000
+		env.settings.max_seconds = 601
 	else:
 		env.f.get_single.side_effect = RuntimeError("sensitive detail")
 	assert env.backend.get_config() == {
@@ -237,7 +243,7 @@ def test_settings_may_be_saved_disabled_without_credentials(env):
 @pytest.mark.parametrize("field,value", [
 	("iflytek_app_id", ""), ("iflytek_api_key", ""), ("iflytek_app_id", "123/../../"),
 	("iflytek_app_id", "１２３４"), ("iflytek_app_id", "a" * 65), ("iflytek_api_key", "id&nonce=1"),
-	("max_seconds", 0), ("max_seconds", 61),
+	("max_seconds", 0), ("max_seconds", 601),
 	("max_seconds", 1.5), ("max_seconds", True), ("max_seconds", "no"),
 ])
 def test_settings_reject_invalid_values(env, field, value):
@@ -246,11 +252,9 @@ def test_settings_reject_invalid_values(env, field, value):
 		env.settings.validate()
 
 
-@pytest.mark.parametrize("secret", [None, "", "   "])
-def test_settings_require_secret_only_when_enabled(env, secret):
-	env.settings.get_password.return_value = secret
-	with pytest.raises(ValidationError, match="APISecret"):
-		env.settings.validate()
+def test_settings_do_not_require_legacy_secret_for_rtasr(env):
+	env.settings.get_password.return_value = None
+	env.settings.validate()
 
 
 @pytest.mark.parametrize("word", ["too long " + "x" * 30, "x" * 31, "台" * 11,
@@ -285,5 +289,7 @@ def test_doctype_exposes_credentials_only_to_system_manager():
 	fields = {row["fieldname"]: row for row in doc["fields"]}
 	assert fields["enabled"]["default"] == "0"
 	assert fields["iflytek_api_secret"]["fieldtype"] == "Password"
+	assert fields["iflytek_api_secret"]["hidden"] == 1
+	assert fields["iflytek_api_secret"]["read_only"] == 1
 	assert fields["max_seconds"]["default"] == "60"
 	assert doc["track_changes"] == 0

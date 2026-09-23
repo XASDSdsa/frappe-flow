@@ -73,6 +73,30 @@ test('iFlytek wpgs results append and replace interim ranges', () => {
   assert.equal(transcript.text, '山东绿方120颗。');
 });
 
+test('RTASR data JSON strings replace interim segments and preserve finalized text', () => {
+  const transcript = new Transcript();
+  const result = (seg_id, text, type) => transcript.add({ action: 'result', code: 0,
+    data: JSON.stringify({ seg_id, cn: { st: { type, rt: [{ ws: [{ cw: [{ w: text }] }] }] } } }) });
+  result(2, '世界', 1);
+  result(1, '你好', 1);
+  assert.equal(transcript.text, '你好世界');
+  result(1, '你好，', 0);
+  result(1, '迟到覆盖', 1);
+  assert.equal(transcript.text, '你好，世界');
+  result(2, '', 0);
+  assert.equal(transcript.text, '你好，');
+});
+
+test('RTASR malformed result data is ignored without throwing', () => {
+  const transcript = new Transcript();
+  for (const message of [
+    { action: 'started', code: 0 },
+    { action: 'result', code: 0, data: 'not-json' },
+    { action: 'result', code: 0, data: JSON.stringify({ cn: { st: { type: 1, rt: [] } } }) },
+  ]) transcript.add(message);
+  assert.equal(transcript.text, '');
+});
+
 for (const rate of [44100, 48000]) {
   test(`${rate} Hz capture produces exactly 16,000 samples per second in 40 ms packets`, () => {
     const result = resample(rate, new Float32Array(rate).fill(0.5));

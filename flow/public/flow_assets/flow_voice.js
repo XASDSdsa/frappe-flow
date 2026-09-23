@@ -5,14 +5,8 @@
 	const WORKLET = "/assets/flow/flow_assets/flow_voice_audio_worklet.js";
 	let config, configAt = 0, configRequest, controller, root, frame;
 	const notice = (message, indicator = "orange") => window.frappe?.show_alert?.({ message, indicator }, 7);
-	const base64 = (buffer) => {
-		const bytes = new Uint8Array(buffer);
-		let binary = "";
-		for (let index = 0; index < bytes.length; index += 0x8000) {
-			binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-		}
-		return btoa(binary);
-	};
+	const RTASR_URL = "wss://rtasr.xfyun.cn/v1/ws?";
+	const RTASR_END = Uint8Array.from([123, 34, 101, 110, 100, 34, 58, 116, 114, 117, 101, 125]);
 	const settings = () => {
 		window.frappe?.flow?.panel?.hide();
 		window.frappe?.set_route?.("Form", "Flow Voice Settings", "Flow Voice Settings");
@@ -59,20 +53,17 @@
 		} else notice(message);
 	}
 	const errors = {
-		10005: "科大讯飞 AppID 鉴权失败，请管理员检查是否开通语音听写。",
-		10006: "科大讯飞采样率参数错误，请联系管理员。",
-		10009: "科大讯飞拒绝了音频数据，请检查麦克风格式。",
-		10014: "科大讯飞语音会话超时，请重新录音。",
-		10043: "科大讯飞无法解码音频，请重新录音。",
-		10101: "科大讯飞语音会话已结束，请重新录音。",
-		10109: "科大讯飞音频数据无效或超过时长限制。",
-		10114: "单次语音最长 60 秒，请分段录音。",
-		10160: "科大讯飞请求格式错误，请联系管理员。",
-		10161: "科大讯飞音频编码错误，请重新录音。",
-		10200: "科大讯飞读取音频超时，请重新录音。",
-		11200: "科大讯飞语音服务未授权或额度已用完，请管理员检查控制台。",
-		11201: "科大讯飞日调用量已用完，请稍后重试。",
-		11202: "科大讯飞调用频率过高，请稍后重试。",
+		10105: "科大讯飞实时转写鉴权失败，请检查实时转写 AppID 和 APIKey。",
+		10106: "科大讯飞实时转写参数无效，请联系管理员检查配置。",
+		10107: "科大讯飞实时转写参数值非法，请联系管理员检查配置。",
+		10110: "科大讯飞实时转写服务未开通或额度已用完，请检查控制台。",
+		10700: "科大讯飞实时转写引擎异常，请稍后重试。",
+		10202: "科大讯飞实时转写连接超时，请检查网络后重试。",
+		10204: "科大讯飞实时转写连接异常，请稍后重试。",
+		10205: "科大讯飞实时转写请求过于频繁，请稍后重试。",
+		10800: "科大讯飞实时转写并发数已满，请稍后重试。",
+		16003: "科大讯飞实时转写基础服务异常，请稍后重试。",
+		37005: "科大讯飞没有收到有效音频，请重新录音。",
 	};
 
 	class VoiceInput {
@@ -155,7 +146,7 @@
 				start: this.input.selectionStart ?? this.input.value.length,
 				end: this.input.selectionEnd ?? this.input.value.length,
 				readOnly: this.input.readOnly, abort: new AbortController(),
-				transcript: new window.LeyaFlowVoiceCore.Transcript(), timers: [], ended: false };
+				transcript: new window.LeyaFlowVoiceCore.Transcript(), timers: [], ended: false, endSent: false };
 			this.input.readOnly = true;
 			this.status.hidden = false;
 			this.composer.classList.add("flow-voice-busy");
@@ -176,7 +167,7 @@
 				const [auth] = await Promise.all([request("create_session", true, s.abort.signal), media,
 					resume, s.context.audioWorklet.addModule(WORKLET)]);
 				if (this.session !== s) return;
-				if (!auth?.url?.startsWith("wss://iat-api.xfyun.cn/v2/iat?") || !auth.app_id) throw new Error("语音服务返回了无效的连接地址。");
+				if (!auth?.url?.startsWith(RTASR_URL)) throw new Error("语音服务返回了无效的实时转写连接地址。");
 				s.source = s.context.createMediaStreamSource(s.stream);
 				s.node = new AudioWorkletNode(s.context, "flow-pcm", {
 					numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
@@ -194,23 +185,12 @@
 						if (s.socket.readyState !== WebSocket.OPEN || s.socket.bufferedAmount > 64000) {
 							this.fail(s, "网络传输过慢，语音已停止。请检查已识别文字后重试。"); return;
 						}
-						const payload = {
-							data: {
-								status: s.audioStarted ? 1 : 0,
-								format: "audio/L16;rate=16000",
-								encoding: "raw",
-								audio: base64(data.buffer),
-							},
-						};
-						if (!s.audioStarted) {
-							payload.common = { app_id: auth.app_id };
-							payload.business = { language: "zh_cn", domain: "iat", accent: "mandarin", dwa: "wpgs", ptt: 1 };
-							s.audioStarted = true;
-						}
-						s.socket.send(JSON.stringify(payload));
+						s.socket.send(data.buffer);
+						s.audioStarted = true;
 					} else if (data.type === "flushed" && s.phase === "finishing" && !s.ended) {
 						s.ended = true;
-						if (s.socket.readyState === WebSocket.OPEN) s.socket.send(JSON.stringify({ data: { status: 2 } }));
+						s.endSent = true;
+						if (s.socket.readyState === WebSocket.OPEN) s.socket.send(RTASR_END);
 					}
 				};
 				s.phase = "connecting";
@@ -220,27 +200,30 @@
 					s.timers.forEach(clearTimeout); s.timers = [];
 					s.phase = "recording";
 					s.node.port.postMessage({ type: "start" });
-					s.timers.push(setTimeout(() => { if (this.session === s) this.finish(); }, Math.min(auth.max_seconds || 60, 60) * 1000));
+					s.timers.push(setTimeout(() => { if (this.session === s) this.finish(); }, Math.max(1, Number(auth.max_seconds) || 60) * 1000));
 					this.showPhase();
 				};
 				s.socket.onmessage = ({ data }) => {
 					if (this.session !== s) return;
 					let message;
 					try { message = JSON.parse(data); } catch (_) { this.fail(s, "语音服务返回了无法识别的结果，请重新录音。"); return; }
+					if (message.action === "started") return;
 					if (Number(message.code || 0) !== 0) {
 						this.fail(s, errors[message.code] || `语音识别服务暂时不可用（${Number(message.code)}），请稍后重试。`); return;
 					}
 					const previousText = s.transcript.text;
 					const text = s.transcript.add(message);
 					if (text !== previousText && !this.write(s, text)) return;
-					if (Number(message.data?.status) === 2 || message.data?.result?.ls === true) {
-						if (s.phase !== "finishing") { this.fail(s, "语音连接提前结束，请检查已识别文字后重试。"); return; }
-						this.cleanup(s);
-						notice(text ? "语音已转成文字，请检查后发送。" : "没有识别到语音，请靠近麦克风再试一次。", text ? "green" : "orange");
-					}
 				};
 				s.socket.onerror = () => this.fail(s, "无法连接科大讯飞语音服务，请检查网络或联系管理员。");
-				s.socket.onclose = () => { if (this.session === s) this.fail(s, "语音连接已中断，请检查已识别文字后重试。"); };
+				s.socket.onclose = () => {
+					if (this.session !== s) return;
+					if (s.endSent || s.phase === "finishing") {
+						const text = s.transcript.text;
+						this.cleanup(s);
+						notice(text ? "语音已转成文字，请检查后发送。" : "没有识别到语音，请靠近麦克风再试一次。", text ? "green" : "orange");
+					} else this.fail(s, "语音连接已中断，请检查已识别文字后重试。");
+				};
 			} catch (error) {
 				if (this.session !== s) return;
 				const text = error.name === "NotAllowedError" ? "未获得麦克风权限，请在浏览器网站设置中允许麦克风。"
