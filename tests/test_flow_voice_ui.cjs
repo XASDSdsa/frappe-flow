@@ -293,6 +293,17 @@ test('click toggles continuous recording; second click stops, and a pending star
   assert.equal(pending.track.stops, 1); assert.equal(pending.sockets.length, 0);
 });
 
+test('second microphone click while finalizing cancels immediately without timeout notice', async () => {
+  const h = await harness(); await h.record(); h.result('识别中');
+  h.click(h.button);
+  assert.equal(h.status.hidden, false);
+  assert.ok([...h.timers.values()].some(entry => entry.delay === 8000));
+  h.click(h.button);
+  assertReleased(h);
+  assert.equal(h.input.value, '原草稿');
+  assert.equal(h.notices.some(entry => /最后一段识别超时/.test(entry.message)), false);
+});
+
 test('external draft changes are preserved and stop recognition', async () => {
   const h = await harness(); await h.record(); h.result('识别中');
   h.input.value = '用户新的草稿'; h.result('迟到更新');

@@ -73,18 +73,30 @@ test('iFlytek wpgs results append and replace interim ranges', () => {
   assert.equal(transcript.text, '山东绿方120颗。');
 });
 
-test('RTASR data JSON strings replace interim segments and preserve finalized text', () => {
+test('RTASR keeps one replaceable interim result and preserves finalized segments', () => {
   const transcript = new Transcript();
   const result = (seg_id, text, type) => transcript.add({ action: 'result', code: 0,
     data: JSON.stringify({ seg_id, cn: { st: { type, rt: [{ ws: [{ cw: [{ w: text }] }] }] } } }) });
-  result(2, '世界', 1);
-  result(1, '你好', 1);
-  assert.equal(transcript.text, '你好世界');
-  result(1, '你好，', 0);
-  result(1, '迟到覆盖', 1);
-  assert.equal(transcript.text, '你好，世界');
-  result(2, '', 0);
-  assert.equal(transcript.text, '你好，');
+  result(5, '查一下', 1);
+  result(6, '查一下我', 1);
+  result(7, '查一下我的库存', 1);
+  assert.equal(transcript.text, '查一下我的库存');
+  result(7, '查一下我的库存', 0);
+  assert.equal(transcript.text, '查一下我的库存');
+  result(8, '，谢谢。', 1);
+  assert.equal(transcript.text, '查一下我的库存，谢谢。');
+  result(8, '，谢谢。', 0);
+  result(9, '下一句', 1);
+  assert.equal(transcript.text, '查一下我的库存，谢谢。下一句');
+});
+
+test('RTASR interim frames containing committed text do not duplicate it', () => {
+  const transcript = new Transcript();
+  const result = (seg_id, text, type) => transcript.add({ action: 'result', code: 0,
+    data: JSON.stringify({ seg_id, cn: { st: { type, rt: [{ ws: [{ cw: [{ w: text }] }] }] } } }) });
+  result(0, '查一下', 0);
+  result(1, '查一下我的库存', 1);
+  assert.equal(transcript.text, '查一下我的库存');
 });
 
 test('RTASR malformed result data is ignored without throwing', () => {

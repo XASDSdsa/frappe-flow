@@ -94,7 +94,7 @@
 				// Match WeChat: click once to activate, click again to stop.
 				if (this.session) {
 					if (["recording", "connecting"].includes(this.session.phase)) this.finish();
-					else if (this.session.phase === "preparing") this.cancel();
+					else if (["preparing", "finishing"].includes(this.session.phase)) this.cancel();
 				} else this.begin({});
 			});
 			listen(this.cancelButton, "click", () => this.cancel());
@@ -125,7 +125,7 @@
 			if (!s) return;
 			this.label.textContent = s.phase === "recording"
 				? "正在录音，再次点击麦克风结束 · Esc 取消"
-				: s.phase === "finishing" ? "正在确认最后的文字…" : "正在准备麦克风，请稍候…";
+				: s.phase === "finishing" ? "正在确认最后的文字…再次点击麦克风可取消" : "正在准备麦克风，请稍候…";
 		}
 		async begin({ pointer = null, y = 0 }) {
 			if (this.input.disabled || this.input.readOnly || this.session) return;

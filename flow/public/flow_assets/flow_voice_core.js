@@ -15,6 +15,13 @@
 	class Transcript {
 		constructor() {
 			this.sentences = new Map();
+			// RTASR sends type=1 hypotheses repeatedly while a segment is being
+			// recognized.  seg_id is the response sequence, so it is not a stable
+			// key for those hypotheses. Keep one replaceable interim value instead
+			// of appending every response as a new sentence.
+			this.rtasrFinal = new Map();
+			this.rtasrInterim = "";
+			this.rtasrMode = false;
 		}
 
 		add(message) {
@@ -49,6 +56,7 @@
 
 		_addRtasr(message) {
 			if (message.action !== "result" || Number(message.code || 0) !== 0) return false;
+			this.rtasrMode = true;
 			let data = message.data;
 			if (typeof data === "string") {
 				try { data = JSON.parse(data); } catch (_) { return true; }
@@ -60,7 +68,12 @@
 				.map((candidate) => candidate?.w || "")
 				.join("");
 			const id = data.seg_id ?? data.segId ?? data.segment_id;
-			this.update(id, text, Number(state.type) === 0);
+			if (Number(state.type) === 0) {
+				if (typeof id === "string" || typeof id === "number") this.rtasrFinal.set(String(id), text);
+				this.rtasrInterim = "";
+			} else {
+				this.rtasrInterim = text;
+			}
 			return true;
 		}
 
@@ -73,6 +86,19 @@
 		}
 
 		get text() {
+			if (this.rtasrMode) {
+				const orderedFinal = Array.from(this.rtasrFinal.entries()).sort(([left], [right]) => {
+					const a = Number(left), b = Number(right);
+					if (Number.isFinite(a) && Number.isFinite(b) && a !== b) return a - b;
+					return left < right ? -1 : left > right ? 1 : 0;
+				}).map(([, value]) => value);
+				const committed = joinSentences(orderedFinal);
+				let interim = this.rtasrInterim;
+				// Some gateways return the whole transcript in an interim frame.
+				// Remove the already committed prefix so it cannot be duplicated.
+				if (committed && interim.startsWith(committed)) interim = interim.slice(committed.length);
+				return joinSentences([...orderedFinal, interim]);
+			}
 			const ordered = Array.from(this.sentences.entries()).sort(([left], [right]) => {
 				const a = Number(left), b = Number(right);
 				if (Number.isFinite(a) && Number.isFinite(b) && a !== b) return a - b;
@@ -83,6 +109,9 @@
 
 		clear() {
 			this.sentences.clear();
+			this.rtasrFinal.clear();
+			this.rtasrInterim = "";
+			this.rtasrMode = false;
 		}
 	}
 
