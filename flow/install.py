@@ -24,3 +24,24 @@ def after_migrate() -> None:
 	else:
 		workspace.append("links", {"link_type": "DocType", "link_to": "Flow Voice Settings", "label": "Flow 语音设置"})
 		workspace.save(ignore_permissions=True)
+
+	if frappe.db.exists("Workspace Sidebar", "Flow"):
+		sidebar = frappe.get_doc("Workspace Sidebar", "Flow")
+		for item in sidebar.items or []:
+			if item.link_to == "Flow Voice Settings" or item.label == "Flow 语音设置":
+				item.link_type = "DocType"
+				item.link_to = "Flow Voice Settings"
+				item.label = "Flow 语音设置"
+				break
+		else:
+			sidebar.append(
+				"items",
+				{
+					"type": "Link",
+					"label": "Flow 语音设置",
+					"link_type": "DocType",
+					"link_to": "Flow Voice Settings",
+					"child": 1,
+				},
+			)
+		sidebar.save(ignore_permissions=True)
