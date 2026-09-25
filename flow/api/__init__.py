@@ -8,6 +8,7 @@ from flow.api.api import (
 	stop_run,
 	submit_feedback,
 )
+from flow.api.media import get_chat_original
 
 __all__ = [
 	"attach_file",
@@ -17,4 +18,5 @@ __all__ = [
 	"start_run",
 	"stop_run",
 	"submit_feedback",
+	"get_chat_original",
 ]

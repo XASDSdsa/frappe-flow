@@ -10,6 +10,7 @@ import frappe
 from frappe import _
 
 from flow.lib.tool import Tool, tool
+from flow.tools.images import show_image
 from flow.utils.safe_exec import safe_exec
 
 MAX_READ_LIMIT = 200
@@ -476,6 +477,7 @@ BUILTIN_TOOLS: list[Tool] = [
 	delete,
 	run_action,
 	execute,
+	show_image,
 ]
 
 

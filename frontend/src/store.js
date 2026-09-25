@@ -84,12 +84,17 @@ async function restoreSession() {
 	if (sessionRestored) return;
 	sessionRestored = true;
 	const { session } = readPanelState();
-	if (!session) return;
-	try {
-		await switchSession(session);
-	} catch {
-		newChat();
+	const candidates = [session, !session && recentSessions.value[0]?.name].filter(Boolean);
+	for (const candidate of candidates) {
+		try {
+			await switchSession(candidate);
+			return;
+		} catch {
+			// A local session can be stale or belong to a different login. Try the
+			// newest server-side session for the current user before opening a blank chat.
+		}
 	}
+	newChat();
 }
 
 async function refreshHistory() {
