@@ -1,0 +1,26 @@
+name: Ecosystem CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecosystem-ci-flow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: XASDSdsa/frappe-ecosystem-cicd/.github/workflows/frappe-ci.yml@v1
+    with:
+      python-version: "3.14"
+      node-version: "24"
+      install-command: |
+        python -m pip install --upgrade pip
+        npm install --global yarn
+        yarn install --frozen-lockfile
+      test-command: python -m compileall -q .
+      node-command: yarn build
