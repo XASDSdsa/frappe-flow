@@ -45,5 +45,5 @@ jobs:
               owner: 'XASDSdsa',
               repo: 'frappe-ecosystem-cicd',
               event_type: 'ecosystem-source-updated',
-              client_payload: { repository: context.repo.repo, ref: context.ref, sha: context.sha },
+              client_payload: { repository: context.repo.owner + '/' + context.repo.repo, ref: context.ref, sha: context.sha },
             });
