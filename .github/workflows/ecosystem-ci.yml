@@ -26,7 +26,8 @@ jobs:
       node-command: yarn build
 
   notify-central-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CENTRAL_RELEASE_ENABLED == 'true'
+    needs: ci
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CENTRAL_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch unified release build
