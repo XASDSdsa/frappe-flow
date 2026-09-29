@@ -9,6 +9,7 @@ from flow.integrations.erpnext.flow_reply_style import with_reply_style
 
 PREVIEW_SLUG = "preview_sales_order"
 CREATE_SLUG = "create_sales_order_draft"
+DETAILS_SLUG = "query_sales_order_details"
 HINT_MARKER = "销售订单专用工具规则："
 LEGACY_HINT_MARKER = "创建销售订单的销售团队必填规则："
 HINT = (
@@ -48,6 +49,8 @@ HINT = (
     "不提交订单、不扣库存、不生成收款；按实际返回说明。"
     "过期或资料已变化的预检必须重新调用 preview_sales_order；重复同一令牌复用原订单，不能据此重新建单。"
     "只有用户明确要求第二张相同订单时才可在预检传 new_order=true，不得为重试、继续旧对话或规避重复检查制造新订单意图。"
+    "用户要求查看销售订单、最新订单或订单明细时，先调用只读 query_sales_order_details；它会按当前权限一次返回完整商品行和收款摘要。"
+    "不要先用通用 read 读取子表，也不要改用 get_delivery_note_options、get_sales_invoice_options 或 execute；销售订单查询与出库、开票是不同动作。"
     "原订单已取消或被修改时报告实际状态，不自动重建。仅 verified=true 的成功结果可报告保存成功，并提供回读核实后的真实订单链接。"
     "正文只用短摘要说明当前结果、实际异常原因和下一步；完整steps不默认逐条复述，仍准确区别预检通过、待批准、已保存、已复用、失败与已回滚，不编造过程或链接。"
 )
@@ -93,7 +96,12 @@ def install_sales_order_tools(enable=False):
         frappe.throw("Flow 尚未安装")
     installed = []
     enabled = []
-    for slug, title, confirm, description in (
+    definitions = (
+        (
+            DETAILS_SLUG, "读取销售订单完整明细", False,
+            "只读读取当前账号可见的指定销售订单；未传订单号时返回最新未取消订单。一次返回完整商品行、数量、仓库、金额和收款摘要。"
+            "不读取出库单或发票，不执行代码，不保存任何记录。",
+        ),
         (
             PREVIEW_SLUG, "销售订单只读预检", False,
             "按当前真实会话操作者与原生销售人员关联，只读核对客户、商品、可选对应贴纸、价格、税费、地址与交期。"
@@ -111,7 +119,8 @@ def install_sales_order_tools(enable=False):
             "创建并回读核验销售订单草稿；失败完整回滚。重复令牌复用原订单；过期或有变化需重新预检。"
             "不提交订单、不扣库存、不登记收款，不重新创建已取消或已修改的原订单。",
         ),
-    ):
+    )
+    for slug, title, confirm, description in definitions:
         values = {
             "type": "Imported",
             "code": None,
@@ -157,3 +166,55 @@ def install_sales_order_tools(enable=False):
             frappe.clear_document_cache("Flow Agent", name)
             agents.append(name)
     return {"tools": installed, "type": "Imported", "enabled": all(enabled), "agents": agents}
+
+
+def install_sales_order_query_tool(enable=True):
+    """将历史订单明细脚本迁移为 Flow 源码工具并绑定两个业务 Agent。"""
+    if not frappe.db.exists("DocType", "Flow Tool"):
+        return {"installed": False, "reason": "Flow 尚未安装"}
+    definition = (
+        DETAILS_SLUG,
+        "读取销售订单完整明细",
+        False,
+        "只读读取当前账号可见的指定销售订单；未传订单号时返回最新未取消订单。一次返回完整商品行、数量、仓库、金额和收款摘要。"
+        "不读取出库单或发票，不执行代码，不保存任何记录。",
+    )
+    slug, title, confirm, description = definition
+    values = {
+        "type": "Imported",
+        "code": None,
+        "title": title,
+        "import_path": "flow.integrations.erpnext.sales_order_flow." + slug,
+        "requires_confirmation": int(confirm),
+        "description": description,
+        "summary": "只读返回销售订单完整商品明细和收款摘要。",
+    }
+    name = frappe.db.get_value("Flow Tool", {"slug": slug}, "name")
+    if name:
+        frappe.db.set_value("Flow Tool", name, values)
+    else:
+        doc = frappe.get_doc({"doctype": "Flow Tool", "slug": slug, "enabled": int(enable), **values})
+        doc.insert(ignore_permissions=True)
+        name = doc.name
+    if enable and not frappe.db.get_value("Flow Tool", name, "enabled"):
+        frappe.db.set_value("Flow Tool", name, "enabled", 1)
+    frappe.clear_document_cache("Flow Tool", name)
+
+    agents = []
+    if enable and frappe.db.exists("DocType", "Flow Agent"):
+        for title in ("Flow", "销售助理"):
+            agent_name = frappe.db.get_value("Flow Agent", {"title": title}, "name") or (
+                title if frappe.db.exists("Flow Agent", title) else None
+            )
+            if not agent_name or agent_name in agents:
+                continue
+            agent = frappe.get_doc("Flow Agent", agent_name)
+            changed = False
+            if not any(row.tool == name for row in agent.get("tools") or []):
+                agent.append("tools", {"tool": name})
+                changed = True
+            if changed:
+                agent.save(ignore_permissions=True)
+            frappe.clear_document_cache("Flow Agent", agent_name)
+            agents.append(agent_name)
+    return {"installed": True, "tool": name, "enabled": bool(frappe.db.get_value("Flow Tool", name, "enabled")), "agents": agents}

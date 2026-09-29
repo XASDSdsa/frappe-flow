@@ -130,8 +130,8 @@ class SalesOrderToolInstallationTests(unittest.TestCase):
         result = module.install_sales_order_tools()
         self.assertFalse(result["enabled"])
         self.assertEqual(result["agents"], [])
-        self.assertEqual(len(rows), 2)
-        for slug, requires_confirmation in ((module.PREVIEW_SLUG, 0), (module.CREATE_SLUG, 1)):
+        self.assertEqual(len(rows), 3)
+        for slug, requires_confirmation in ((module.DETAILS_SLUG, 0), (module.PREVIEW_SLUG, 0), (module.CREATE_SLUG, 1)):
             row = rows["tool-" + slug]
             self.assertEqual(row.type, "Imported")
             self.assertIsNone(row.code)
@@ -168,8 +168,32 @@ class SalesOrderToolInstallationTests(unittest.TestCase):
             agent.save.assert_called_once_with(ignore_permissions=True)
         module.install_sales_order_tools(enable=True)
         for agent in agents.values():
-            self.assertEqual(len(agent.tools), 2)
+            self.assertEqual(len(agent.tools), 3)
             agent.save.assert_called_once_with(ignore_permissions=True)
+
+    def test_query_migration_reuses_legacy_script_identity(self):
+        module, _, rows, agents = load_install()
+        legacy = Document(
+            {
+                "name": "legacy-query-sales-order-details",
+                "slug": module.DETAILS_SLUG,
+                "type": "Script",
+                "enabled": 1,
+                "instructions": "旧数据库脚本",
+            },
+            rows,
+        )
+        rows[legacy.name] = legacy
+
+        result = module.install_sales_order_query_tool(enable=True)
+
+        assert result["tool"] == legacy.name
+        assert legacy.type == "Imported"
+        assert legacy.code is None
+        assert legacy.import_path == "flow.integrations.erpnext.sales_order_flow.query_sales_order_details"
+        assert legacy.requires_confirmation == 0
+        assert legacy.enabled == 1
+        assert {row.tool for agent in agents.values() for row in agent.tools} == {legacy.name}
 
     def test_missing_flow_does_not_write_tools(self):
         module, frappe, rows, _ = load_install()

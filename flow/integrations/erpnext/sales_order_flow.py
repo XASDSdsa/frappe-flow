@@ -90,6 +90,91 @@ def _read(doctype, name):
     return doc
 
 
+def query_sales_order_details(sales_order: str = "", customer: str = ""):
+	"""只读返回一张销售订单的完整商品行和收款摘要。
+
+	传入精确销售订单号时只读取该订单；未传订单号时按当前账号权限选择最新
+	一张未取消订单。该工具不读取出库单或发票，也不执行任意代码，专门处理
+	“查看最新订单／查看订单明细”这类查询。
+	"""
+	try:
+		def number(value):
+			try:
+				return float(value or 0)
+			except (TypeError, ValueError, OverflowError):
+				return 0.0
+
+		if not isinstance(sales_order, str) or not isinstance(customer, str):
+			return {"status": "needs_input", "verified": False, "message": "销售订单号和客户编号必须是文本。"}
+		sales_order = sales_order.strip()
+		customer = customer.strip()
+		if sales_order:
+			order = _read("Sales Order", sales_order)
+		else:
+			filters = {"docstatus": ["!=", 2]}
+			if customer:
+				filters["customer"] = customer
+			candidates = frappe.get_list(
+				"Sales Order",
+				filters=filters,
+				fields=[
+					"name", "customer", "customer_name", "company", "currency",
+					"transaction_date", "delivery_date", "status", "docstatus",
+					"grand_total", "advance_paid",
+				],
+				order_by="creation desc, name desc",
+				limit_page_length=1,
+			)
+			if not candidates:
+				return {
+					"status": "not_found", "verified": True,
+					"message": "当前账号没有可读取的有效销售订单。", "items": [],
+				}
+			order = _read("Sales Order", candidates[0]["name"])
+
+		items = []
+		for row in order.get("items") or []:
+			items.append({
+				"row_no": row.idx,
+				"sales_order_item": row.name,
+				"item_code": row.item_code,
+				"item_name": row.item_name,
+				"description": row.get("description") or "",
+				"qty": number(row.qty),
+				"uom": row.uom,
+				"rate": number(row.rate),
+				"amount": number(row.amount),
+				"warehouse": row.get("warehouse") or "",
+				"delivery_date": str(row.get("delivery_date") or ""),
+				"delivered_qty": number(row.get("delivered_qty") or 0),
+				"billed_amt": number(row.get("billed_amt") or 0),
+				"is_free_item": bool(row.get("is_free_item")),
+			})
+		return {
+			"status": "found",
+			"verified": True,
+			"sales_order": order.name,
+			"customer": order.customer,
+			"customer_name": order.get("customer_name") or order.customer,
+			"company": order.company,
+			"currency": order.currency,
+			"transaction_date": str(order.transaction_date or ""),
+			"delivery_date": str(order.get("delivery_date") or ""),
+			"status_display": order.status,
+			"docstatus": order.docstatus,
+			"grand_total": number(order.grand_total),
+			"advance_paid": number(order.get("advance_paid") or 0),
+			"items": items,
+			"message": f"已读取销售订单 {order.name} 的完整商品明细和收款摘要。",
+		}
+	except Exception as exc:
+		return {
+			"status": "error", "verified": False,
+			"message": strip_html(str(exc)) or "读取销售订单失败，请检查权限和订单编号。",
+			"items": [],
+		}
+
+
 def _native_rows(resolved):
     allowed = {"item_code", "qty", "uom", "conversion_factor", "delivery_date", "rate", "is_free_item"}
     return [{key: value for key, value in row.items() if key in allowed} for row in resolved["items"]]

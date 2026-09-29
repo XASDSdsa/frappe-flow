@@ -7,6 +7,14 @@ import frappe
 
 ASSISTANT_AGENT_TITLE = "Flow"
 ASSISTANT_MAX_ITERATIONS = 40
+ASSISTANT_ROUTING_MARKER = "日常业务工具优先规则："
+ASSISTANT_ROUTING_HINT = ASSISTANT_ROUTING_MARKER + (
+	"客户、销售订单、出库、物流、PayPal、采购和开票等已知业务，先调用已经提供的专用 Imported 工具；"
+	"已知业务对象不要先用 find_doctypes、describe 或通用 read 探索子表，也不要调用 execute、create、update、delete 绕过专用流程。"
+	"查看销售订单、最新订单或订单明细时，优先调用 query_sales_order_details，一次读取完整商品行和收款摘要；"
+	"销售订单查询不要改用出库、发票或物流工具。只有没有对应专用工具、用户明确要求通用系统查询，或专用工具明确说明不支持时，才使用通用工具。"
+	"专用流程按工具返回的预检/候选、一次完整审核和一次批准执行；不要把一个业务动作拆成多次通用写入或重复确认。\n\n"
+)
 
 ASSISTANT_INSTRUCTIONS = (
 	"You are a Frappe assistant operating a live Frappe site through tools. Everything in Frappe "
@@ -58,7 +66,8 @@ ASSISTANT_INSTRUCTIONS = (
 	"STYLE: before each tool call, write one short sentence on what you're doing and why — never call a "
 	"tool silently; if a result changes your plan, say so. When you need a decision or detail you "
 	"cannot discover, end with a short plain-text question and stop. When the task is done, reply in "
-	"plain text."
+	"plain text.\n\n"
+	+ ASSISTANT_ROUTING_HINT
 )
 
 
