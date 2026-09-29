@@ -79,12 +79,16 @@ scheduler_events = {
 	},
 }
 
-after_migrate = ["flow.assistant.sync_builtin_assistant", "flow.install.after_migrate"]
+after_migrate = [
+	"flow.assistant.sync_builtin_assistant",
+	"flow.install.after_migrate",
+	"flow.integrations.erpnext.install.migrate_legacy_tool_paths",
+]
 
 extend_bootinfo = "flow.boot.boot_session"
 
 
-# Generic Flow runtime safeguards live in this app. SF keeps only its business tools.
+# Runtime safeguards and optional business-tool wrappers are owned by Flow.
 try:
 	from flow.compat import (
 		install_describe_compact,
