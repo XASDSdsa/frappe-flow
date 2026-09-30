@@ -31,6 +31,8 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 
 	def fake(name):
 		def install(**kwargs):
+			if name == "customer":
+				assert kwargs["configure_prerequisites"] is False
 			called.append((name, kwargs["enable"]))
 			return {"tool": name}
 

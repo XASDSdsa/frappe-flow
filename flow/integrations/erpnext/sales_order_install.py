@@ -162,7 +162,7 @@ def install_sales_order_tools(enable=False):
                 agent.instructions = instructions
                 changed = True
             if changed:
-                agent.save(ignore_permissions=True)
+                agent.save(ignore_permissions=True, ignore_version=True)
             frappe.clear_document_cache("Flow Agent", name)
             agents.append(name)
     return {"tools": installed, "type": "Imported", "enabled": all(enabled), "agents": agents}
@@ -214,7 +214,7 @@ def install_sales_order_query_tool(enable=True):
                 agent.append("tools", {"tool": name})
                 changed = True
             if changed:
-                agent.save(ignore_permissions=True)
+                agent.save(ignore_permissions=True, ignore_version=True)
             frappe.clear_document_cache("Flow Agent", agent_name)
             agents.append(agent_name)
     return {"installed": True, "tool": name, "enabled": bool(frappe.db.get_value("Flow Tool", name, "enabled")), "agents": agents}

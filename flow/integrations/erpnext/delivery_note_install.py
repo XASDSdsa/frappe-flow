@@ -87,7 +87,7 @@ def install_delivery_note_tools(enable=False):
                 agent.instructions = instructions
                 changed = True
             if changed:
-                agent.save(ignore_permissions=True)
+                agent.save(ignore_permissions=True, ignore_version=True)
             frappe.clear_document_cache("Flow Agent", name)
             agents.append(name)
     return {"tools": installed, "type": "Imported", "enabled": all(bool(frappe.db.get_value("Flow Tool", n, "enabled")) for n in installed), "agents": agents}

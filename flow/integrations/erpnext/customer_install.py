@@ -143,12 +143,15 @@ def prepare_country_territory_groups():
     return converted
 
 
-def install_customer_tools(enable=False):
+def install_customer_tools(enable=False, *, configure_prerequisites=True):
+    """Register tools; only explicit setup also prepares native customer metadata."""
     if not frappe.db.exists("DocType", "Flow Tool"):
         frappe.throw("Flow 尚未安装")
-    ensure_forwarder_address_type()
-    ensure_sales_user_territory_creation()
-    countries = prepare_country_territory_groups() if enable else []
+    countries = []
+    if configure_prerequisites:
+        ensure_forwarder_address_type()
+        ensure_sales_user_territory_creation()
+        countries = prepare_country_territory_groups() if enable else []
     installed = []
     for slug, function, title, confirm in (
         (TOOL_SLUG, TOOL_SLUG, "完整建立或补充客户档案", True),
@@ -196,7 +199,7 @@ def install_customer_tools(enable=False):
             agent.instructions = instructions
             changed = True
         if changed:
-            agent.save(ignore_permissions=True)
+            agent.save(ignore_permissions=True, ignore_version=True)
         frappe.clear_document_cache("Flow Agent", name)
         agents.append(name)
     return {"tools": installed, "type": "Imported", "enabled": bool(enable), "agents": agents, "country_groups_prepared": countries}

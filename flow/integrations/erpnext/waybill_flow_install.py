@@ -52,7 +52,7 @@ def install_waybill_replacement_tools(enable=False):
 				if not any(row.tool == tool_name for row in agent.get("tools") or []):
 					agent.append("tools", {"tool": tool_name})
 			agent.instructions = with_replacement_guidance(agent.get("instructions"))
-			agent.save(ignore_permissions=True)
+			agent.save(ignore_permissions=True, ignore_version=True)
 			frappe.clear_document_cache("Flow Agent", agent.name)
 			agents.append(name)
 	return {"tools": installed, "type": "Imported", "enabled": bool(enable), "agents": agents}

@@ -71,7 +71,7 @@ def install_finance_tools(enable=False):
                 if not any(row.tool == name for row in agent.get('tools') or []):
                     agent.append('tools', {'tool': name})
             agent.instructions = with_finance_guidance(agent.instructions)
-            agent.save(ignore_permissions=True)
+            agent.save(ignore_permissions=True, ignore_version=True)
             frappe.clear_document_cache('Flow Agent', agent.name)
             agents.append(agent.name)
     return {'tools': installed, 'enabled': enable, 'agents': agents}

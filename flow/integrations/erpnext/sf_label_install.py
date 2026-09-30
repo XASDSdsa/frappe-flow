@@ -90,7 +90,7 @@ def install_sf_label_tools(enable=False):
                 if not any(row.tool == tool_name for row in agent.get("tools") or []):
                     agent.append("tools", {"tool": tool_name})
             agent.instructions = with_sf_label_guidance(agent.get("instructions"))
-            agent.save(ignore_permissions=True)
+            agent.save(ignore_permissions=True, ignore_version=True)
             frappe.clear_document_cache("Flow Agent", name)
             agents.append(name)
     return {"tools": installed, "type": "Imported", "enabled": all(bool(frappe.db.get_value("Flow Tool", n, "enabled")) for n in installed), "agents": agents}
@@ -129,7 +129,7 @@ def retire_legacy_booking_tool():
             kept = [row for row in doc.get("tools") or [] if row.tool not in names]
             if len(kept) != len(doc.get("tools") or []):
                 doc.set("tools", kept)
-                doc.save(ignore_permissions=True)
+                doc.save(ignore_permissions=True, ignore_version=True)
                 frappe.clear_document_cache("Flow Agent", name)
                 changed.append(name)
     return {"disabled": rows, "agents": changed}

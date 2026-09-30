@@ -47,7 +47,6 @@ MANAGED_TOOL_SLUGS = {
 	"preview_sf_label",
 	"create_sf_label",
 	"get_sf_label_result",
-	"preview_sf_dispatch",
 	"dispatch_sf_label",
 	"preview_sf_waybill_replacement",
 	"create_sf_waybill_replacement",
@@ -65,7 +64,7 @@ LEGACY_DISABLED_SLUGS = {
 OPTIONAL_TOOL_SLUGS = {"paypal_receipt_procedure"}
 SHIPPING_TOOL_SLUGS = {
 	"prepare_sf_label", "list_sf_label_addresses", "preview_sf_label", "create_sf_label",
-	"get_sf_label_result", "preview_sf_dispatch", "dispatch_sf_label", "preview_sf_waybill_replacement",
+	"get_sf_label_result", "dispatch_sf_label", "preview_sf_waybill_replacement",
 	"create_sf_waybill_replacement", "record_sf_waybill_replacement_feedback",
 	"activate_sf_waybill_replacement",
 }
@@ -198,7 +197,9 @@ def capture():
 
 def _assert_protected_unchanged(snapshot):
 	actual = _protected_state()
-	assert actual == snapshot["protected"], "protected_business_or_security_state_changed"
+	changed = sorted(key for key in actual.keys() | snapshot["protected"].keys()
+		if actual.get(key) != snapshot["protected"].get(key))
+	assert not changed, "protected_business_or_security_state_changed:" + ",".join(changed)
 
 
 def _clear_flow_cache():
@@ -427,7 +428,7 @@ def migrate(snapshot, inject_failure=False):
 	if inject_failure:
 		# Keep the release runner's existing sentinel. The isolated rehearsal now
 		# has persisted metadata to exercise the actual old-image restore path.
-		raise RuntimeError("ISOLATED_INJECTED_FAILURE_AFTER_OWNER")
+		raise RuntimeError("ISOLATED_INJECTED_FAILURE_AFTER_OWNER:FLOW_METADATA")
 	return {"workflows": result, "contract": contract}
 
 

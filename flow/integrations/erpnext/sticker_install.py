@@ -87,7 +87,7 @@ def install_sticker_tool(enable=False):
 			agent.instructions = instructions
 			changed = True
 		if changed:
-			agent.save(ignore_permissions=True)
+			agent.save(ignore_permissions=True, ignore_version=True)
 		frappe.clear_document_cache("Flow Agent", agent_name)
 		agents.append(agent_name)
 	return {"tool": name, "type": "Imported", "enabled": bool(frappe.db.get_value("Flow Tool", name, "enabled")),

@@ -1,8 +1,6 @@
-"""Move existing business-tool registrations without changing their behavior.
+"""Synchronize Flow tool registrations and guidance without customer setup.
 
-This optional integration never installs ERPNext/Shipping, creates business data,
-changes agent instructions, or enables a tool. Fresh setup remains an explicit
-operation through the individual workflow installers.
+Native address, territory and permission prerequisites remain explicit setup.
 """
 
 import json
@@ -35,7 +33,7 @@ def ensure_workflow_tools(enable: bool = True):
 	from .sticker_install import install_sticker_tool
 
 	result = {
-		"customer": install_customer_tools(enable=enable),
+		"customer": install_customer_tools(enable=enable, configure_prerequisites=False),
 		"sticker": install_sticker_tool(enable=enable),
 		"sales_order": install_sales_order_tools(enable=enable),
 		"sales_order_query": install_sales_order_query_tool(enable=enable),

@@ -165,11 +165,11 @@ class SalesOrderToolInstallationTests(unittest.TestCase):
             self.assertEqual({row.tool for row in agent.tools}, set(rows))
             self.assertEqual(agent.instructions.count(module.HINT_MARKER), 1)
             self.assertIn("原有", agent.instructions)
-            agent.save.assert_called_once_with(ignore_permissions=True)
+            agent.save.assert_called_once_with(ignore_permissions=True, ignore_version=True)
         module.install_sales_order_tools(enable=True)
         for agent in agents.values():
             self.assertEqual(len(agent.tools), 3)
-            agent.save.assert_called_once_with(ignore_permissions=True)
+            agent.save.assert_called_once_with(ignore_permissions=True, ignore_version=True)
 
     def test_query_migration_reuses_legacy_script_identity(self):
         module, _, rows, agents = load_install()
