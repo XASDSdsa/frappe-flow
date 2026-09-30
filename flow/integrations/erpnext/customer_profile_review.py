@@ -64,5 +64,11 @@ def customer_confirmation_prompt(args):
     from flow.integrations.erpnext.customer_profile import preview_customer_profile
     try:
         return render_customer_review(preview_customer_profile(**args))
-    except Exception:
-        return "🔴 客户审核摘要暂时无法生成，尚未保存。请拒绝本次操作并重新预检。"
+    except Exception as exc:
+        # The preview is part of the approval contract. Hiding the exception
+        # leaves the agent unable to tell the客服 why approval is blocked. Keep
+        # the reason short and escaped; the write tool still performs its own
+        # validation and transaction rollback.
+        reason = _text(str(exc)) or type(exc).__name__
+        return ("🔴 客户审核摘要生成失败，尚未保存。\n"
+                "原因：" + reason[:300] + "。请拒绝本次操作，修正原因后重新预检。")

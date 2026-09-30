@@ -33,6 +33,17 @@ def test_guidance_allows_currency_to_be_derived_from_existing_defaults(monkeypat
     assert "只有没有可用默认值时才补问币种" in module.DETAILS
 
 
+def test_confirmation_prompt_explains_unexpected_preview_failure(monkeypatch):
+    module = load("customer_review_failure_test", "flow/integrations/erpnext/customer_profile_review.py")
+    profile = types.ModuleType("flow.integrations.erpnext.customer_profile")
+    profile.preview_customer_profile = lambda **args: (_ for _ in ()).throw(ValueError("币种默认值读取失败"))
+    monkeypatch.setitem(sys.modules, profile.__name__, profile)
+    result = module.customer_confirmation_prompt({"customer_name": "客户甲"})
+    assert "审核摘要生成失败" in result
+    assert "币种默认值读取失败" in result
+    assert "尚未保存" in result
+
+
 def test_forwarder_review_shows_true_customer_and_receiver_separately():
     module = load("customer_review_test", "flow/integrations/erpnext/customer_profile_review.py")
     result = module.render_customer_review(preview())
