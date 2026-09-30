@@ -49,3 +49,23 @@ def test_sales_order_detail_result_is_not_truncated(monkeypatch):
 	result = module._compact_tool_history(messages)
 
 	assert result[-1]["content"] == content
+
+
+def test_show_image_preview_is_persisted_on_final_assistant_message(monkeypatch):
+	module = load_compat(monkeypatch)
+	markdown = "![flowimg:sticker](/private/files/chat-preview.jpg?fid=file-1)"
+	messages = [
+		{
+			"role": "assistant",
+			"content": None,
+			"tool_calls": [{"id": "call-1", "function": {"name": "show_image"}}],
+		},
+		{"role": "tool", "tool_call_id": "call-1", "content": "{\"ok\": true}"},
+		{"role": "assistant", "content": "图片已展示。"},
+	]
+
+	module._persist_show_image_markdowns(messages, [markdown])
+	module._persist_show_image_markdowns(messages, [markdown])
+
+	assert markdown not in (messages[0]["content"] or "")
+	assert messages[-1]["content"].count(markdown) == 1

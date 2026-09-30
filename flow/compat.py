@@ -544,10 +544,21 @@ def _append_image_markdown(messages: list[Any] | None, markdown: str) -> None:
 		return
 
 
+def _persist_show_image_markdowns(messages: list[Any] | None, markdowns: list[str]) -> None:
+	"""Persist trusted show_image previews in the transcript that Flow stores."""
+	for markdown in markdowns:
+		_append_image_markdown(messages, markdown)
+
+
 def install_show_image_inject() -> None:
-	"""After show_image runs, stream the markdown so the panel renders the picture."""
+	"""Stream show_image previews and persist them when the run is complete.
+
+	The browser guard adds the preview to the live response after each tool event.
+	Only the final RunResult is changed here, so tool-call and tool-result ordering
+	stays valid while FlowSession can persist the preview for later reloads.
+	"""
 	try:
-		from flow.lib.agent import Agent, TextChunk, ToolEnded
+		from flow.lib.agent import Agent, Done, TextChunk, ToolEnded
 	except Exception:
 		return
 	if getattr(Agent._loop_stream, "_flow_show_image", False):
@@ -555,18 +566,19 @@ def install_show_image_inject() -> None:
 	original = Agent._loop_stream
 
 	def _loop_stream(self, messages, executed_calls=None):
+		image_markdowns: list[str] = []
 		for event in original(self, messages, executed_calls):
 			if isinstance(event, TextChunk) and event.text:
 				cleaned = _strip_model_images(event.text)
 				if cleaned != event.text:
 					event = TextChunk(text=cleaned)
+			if isinstance(event, ToolEnded) and event.name == "show_image":
+				markdown = _markdown_from_show_image(event.result)
+				if markdown:
+					image_markdowns.append(markdown)
+			elif isinstance(event, Done):
+				_persist_show_image_markdowns(event.result.messages, image_markdowns)
 			yield event
-			if not isinstance(event, ToolEnded) or event.name != "show_image":
-				continue
-			markdown = _markdown_from_show_image(event.result)
-			if not markdown:
-				continue
-			_append_image_markdown(messages, markdown)
 
 	_loop_stream._flow_show_image = True
 	Agent._loop_stream = _loop_stream
