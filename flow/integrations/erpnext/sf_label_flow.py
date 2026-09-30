@@ -489,6 +489,96 @@ def get_sf_label_result(shipment: str):
         return _failure(exc, steps, "source")
 
 
+def _dispatch_confirmation(args):
+    """Build the final dispatch confirmation from the current Shipment state."""
+    try:
+        shipment = str((args or {}).get("shipment") or "").strip()
+        if not shipment:
+            return "🔴 缺少系统运单编号，不能确认发货。"
+        doc = frappe.get_doc("Shipment", shipment)
+        doc.check_permission("read")
+        if not shipping._is_sf_shipment(doc):
+            return "🔴 这不是顺丰运单，不能用顺丰面单发货工具。"
+        waybill = shipping._sf_waybill(doc)
+        if not waybill:
+            return "🔴 当前运单还没有真实顺丰单号，不能确认发货。"
+        return "\n".join([
+            "🔵 请确认已打印面单并发货",
+            "",
+            "系统运单：" + doc.name,
+            "顺丰单号：" + waybill,
+            "当前状态：" + str(doc.get("status") or "未标记发货"),
+            "",
+            "批准后系统会读取并保存面单，然后把当前运单标记为已发货。",
+            "已发货的运单再次执行只返回当前状态，不会重复请求顺丰。",
+            "请确认包裹确实已交给物流后批准一次。",
+        ])
+    except Exception as exc:
+        return "🔴 当前运单不能确认发货：" + strip_html(str(exc))
+
+
+def _dispatch_sf_label(shipment: str):
+    """After one approval, print the existing label and mark the shipment shipped.
+
+    The carrier implementation owns the native status transition.  This Flow
+    boundary only verifies the current waybill, delegates the mutation once,
+    and reads the saved document back before reporting success.
+    """
+    dispatch_started = False
+    try:
+        _actor()
+        doc = frappe.get_doc("Shipment", shipment, for_update=True)
+        doc.check_permission("write")
+        if not shipping._is_sf_shipment(doc):
+            raise LabelInputError("这不是顺丰运单，不能执行顺丰发货。", ["shipment"])
+        if doc.docstatus != 1:
+            raise LabelInputError("运单必须先提交后才能发货；当前没有修改任何状态。", ["shipment"])
+        if shipping._is_cancelled(doc) or doc.get("sf_carrier_cancelled"):
+            raise LabelInputError("运单已取消，不能再次发货；原面单历史保持不变。", ["shipment"])
+        waybill = str(shipping._sf_waybill(doc) or "").strip()
+        if not waybill:
+            raise LabelInputError("当前运单还没有真实顺丰单号，不能发货；请先完成面单创建并核对结果。", ["shipment"])
+
+        from erpnext_shipping.sf_international import waybill as waybill_api
+        if waybill_api._shipment_is_shipped(doc):
+            return {"status": "already_shipped", "verified": True, "shipment": doc.name,
+                    "waybill": waybill, "message": "该运单已经是已发货状态，没有重复打印或请求顺丰。"}
+
+        dispatch_started = True
+        label_url = shipping.dispatch_sf_shipment(doc.name)
+        saved = frappe.get_doc("Shipment", doc.name)
+        saved.check_permission("read")
+        saved_waybill = str(shipping._sf_waybill(saved) or "").strip()
+        if saved_waybill != waybill:
+            raise LabelInputError("发货后当前顺丰单号发生变化，未确认本次状态；请核对原运单历史。", ["shipment"])
+        if not waybill_api._shipment_is_shipped(saved):
+            raise LabelInputError("顺丰面单调用已返回，但系统回读仍不是已发货；请核对原运单，不要重复操作。", ["shipment"])
+        return {"status": "dispatched", "verified": True, "shipment": saved.name,
+                "waybill": saved_waybill, "label_url": label_url or saved.get("sf_label_url"),
+                "url": "/app/shipment/" + quote(saved.name, safe=""),
+                "message": "已读取现有顺丰面单并确认运单已发货。后续查询物流请使用当前或历史单号。"}
+    except Exception as exc:
+        if dispatch_started:
+            # The native carrier call may have printed the label or persisted
+            # the status before the read-back failed.  Never report that as a
+            # clean failure which invites a second dispatch attempt.
+            try:
+                current = frappe.get_doc("Shipment", shipment)
+                from erpnext_shipping.sf_international import waybill as waybill_api
+                if waybill_api._shipment_is_shipped(current):
+                    return {"status": "already_shipped", "verified": True, "shipment": current.name,
+                            "waybill": str(shipping._sf_waybill(current) or "").strip(),
+                            "message": "原生发货调用后回读到运单已发货，没有重复操作。"}
+            except Exception:
+                pass
+            return {"status": "uncertain", "verified": False, "shipment": shipment,
+                    "reason": strip_html(str(exc)),
+                    "message": "发货请求已经发起，但当前状态暂未核实；请先打开原运单确认，不要重复点击发货。"}
+        return {"status": "error", "verified": False, "shipment": shipment,
+                "reason": strip_html(str(exc)),
+                "message": "发货未完成；系统没有把失败当作已发货，请按原因核对原运单。"}
+
+
 def _confirmation_prompt(args):
     try:
         s = _load("preview", args.get("preview_token"))["summary"]
@@ -527,3 +617,5 @@ def _confirmation_prompt(args):
 from flow.lib.tool import tool
 create_sf_label = tool(_create_sf_label, name="create_sf_label", requires_confirmation=True,
                       confirm_prompt=_confirmation_prompt)
+dispatch_sf_label = tool(_dispatch_sf_label, name="dispatch_sf_label", requires_confirmation=True,
+                         confirm_prompt=_dispatch_confirmation)

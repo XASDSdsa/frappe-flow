@@ -66,6 +66,7 @@ def env(monkeypatch):
     shipping._booking_form_for_doc = lambda doc: json.loads(doc.sf_form_json)
     shipping.book_sf_order_after_commit = Mock(return_value="SF123")
     shipping.print_sf_label = Mock(return_value="/private/files/label.pdf")
+    shipping.dispatch_sf_shipment = Mock(return_value="/private/files/label.pdf")
     monkeypatch.setitem(sys.modules, PROVIDER + "shipping", shipping)
     # Relative import from package must resolve this per-test stub too.
     package = types.ModuleType(PROVIDER[:-1]); package.__path__ = []
@@ -112,6 +113,7 @@ def env(monkeypatch):
     h.source = m._source = Mock(side_effect=lambda *a, **kw: (h.dn, h.doc, deepcopy(h.state)))
     h.attempt = Doc(name="ATTEMPT-1", replacement_reason=m.REASON)
     waybill = types.ModuleType(PROVIDER + "waybill")
+    waybill._shipment_is_shipped = lambda doc: doc.get("status") in ("已发货", "Completed")
     def begin(doc, form, **kwargs):
         h.attempt.form_payload = helpers._json(form)
         return h.attempt
@@ -368,3 +370,54 @@ def test_read_failure_does_not_claim_no_external_booking(env):
     r = h.module.get_sf_label_result('SHIP-1')
     assert '尚未向顺丰' not in r['message']
     assert '没有读取权限' in r['reason']
+
+
+def test_dispatch_existing_label_marks_shipped_and_reads_back(env):
+    h = env
+    h.doc.shipment_id = "SF123"
+    h.doc.docstatus = 1
+    h.doc.status = "待打单发货"
+    h.shipping._is_sf_shipment = lambda doc: True
+    h.shipping.dispatch_sf_shipment.side_effect = lambda name: (h.doc.update(status="已发货") or "/private/files/label.pdf")
+    result = h.module._dispatch_sf_label("SHIP-1")
+    assert result["status"] == "dispatched" and result["verified"]
+    assert result["waybill"] == "SF123"
+    h.shipping.dispatch_sf_shipment.assert_called_once_with("new-shipment")
+
+
+def test_dispatch_replay_returns_existing_state_without_carrier_call(env):
+    h = env
+    h.doc.shipment_id = "SF123"
+    h.doc.docstatus = 1
+    h.doc.status = "已发货"
+    h.shipping._is_sf_shipment = lambda doc: True
+    result = h.module._dispatch_sf_label("SHIP-1")
+    assert result["status"] == "already_shipped" and result["verified"]
+    h.shipping.dispatch_sf_shipment.assert_not_called()
+
+
+def test_dispatch_without_waybill_does_not_mutate(env):
+    h = env
+    h.doc.docstatus = 1
+    h.doc.status = "待打单发货"
+    h.shipping._is_sf_shipment = lambda doc: True
+    result = h.module._dispatch_sf_label("SHIP-1")
+    assert result["status"] == "error" and "真实顺丰单号" in result["reason"]
+    h.shipping.dispatch_sf_shipment.assert_not_called()
+
+
+def test_dispatch_post_call_failure_is_uncertain_and_never_claims_clean_failure(env):
+    h = env
+    h.doc.shipment_id = "SF123"
+    h.doc.docstatus = 1
+    h.doc.status = "待打单发货"
+    h.shipping._is_sf_shipment = lambda doc: True
+
+    def dispatch_then_fail(_name):
+        h.doc.status = "待打单发货"
+        raise TimeoutError("回读超时")
+
+    h.shipping.dispatch_sf_shipment.side_effect = dispatch_then_fail
+    result = h.module._dispatch_sf_label("SHIP-1")
+    assert result["status"] == "uncertain" and not result["verified"]
+    assert "不要重复点击" in result["message"]
