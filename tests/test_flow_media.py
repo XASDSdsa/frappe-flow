@@ -1,5 +1,6 @@
 """Offline regressions for attachment identity and image permission boundaries."""
 
+import hashlib
 import importlib.util
 import sys
 import types
@@ -7,6 +8,7 @@ from fnmatch import fnmatchcase
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from PIL import Image
@@ -36,15 +38,33 @@ class Document(dict):
 		return self.readable
 
 	def get_content(self):
+		if self.get("content"):
+			return self.content
 		buffer = BytesIO()
 		Image.new("RGB", (2, 2), "white").save(buffer, "PNG")
 		return buffer.getvalue()
+
+
+class FileDocument(Document):
+	def __init__(self, store, **values):
+		super().__init__(**values)
+		object.__setattr__(self, "_store", store)
+
+	@property
+	def unique_url(self):
+		if self.is_private:
+			return self.file_url + "?" + urlencode({"fid": self.name})
+		return self.file_url
+
+	def insert(self, **kwargs):
+		return self._store.insert_file(self, **kwargs)
 
 
 class Store:
 	def __init__(self):
 		self.docs = {}
 		self.metas = {}
+		self.inserted = []
 
 	def add_document(self, doctype="Item", name="ITEM-001", image=IMAGE_URL, readable=True, **values):
 		doc = Document(
@@ -61,7 +81,8 @@ class Store:
 	def add_file(self, name="itemfile01", file_url=IMAGE_URL, file_name="shared-product.png",
 		attached_to_doctype="Item", attached_to_name="ITEM-001", attached_to_field="image",
 		is_private=1, readable=True, **values):
-		doc = Document(
+		doc = FileDocument(
+			self,
 			doctype="File", name=name, file_url=file_url, file_name=file_name,
 			attached_to_doctype=attached_to_doctype, attached_to_name=attached_to_name,
 			attached_to_field=attached_to_field, is_private=is_private, readable=readable,
@@ -70,8 +91,26 @@ class Store:
 		self.docs[("File", name)] = doc
 		return doc
 
-	def get_doc(self, doctype, name):
+	def get_doc(self, doctype, name=None):
+		if isinstance(doctype, dict):
+			assert doctype["doctype"] == "File"
+			return FileDocument(self, readable=True, permission_checks=[], **doctype)
 		return self.docs[(doctype, name)]
+
+	def insert_file(self, doc, ignore_permissions=False):
+		assert ignore_permissions is True
+		assert isinstance(doc.content, bytes) and doc.content
+		content_hash = hashlib.md5(doc.content).hexdigest()
+		matches = self.select("File", {"content_hash": content_hash, "is_private": doc.is_private})
+		url_prefix = "/private/files" if doc.is_private else "/files"
+		# Native File content deduplication reuses bytes/URL, preserving the new
+		# document's requested file_name and attachment identity.
+		doc.file_url = matches[0].file_url if matches else f"{url_prefix}/{doc.file_name}"
+		doc.name = f"created{len(self.inserted) + 1:03}"
+		doc.content_hash = content_hash
+		self.docs[("File", doc.name)] = doc
+		self.inserted.append(doc)
+		return doc
 
 	def select(self, doctype, filters=None):
 		if isinstance(filters, str):
@@ -146,11 +185,13 @@ def env(monkeypatch):
 
 	def save_file(file_name, content, doctype, name, is_private=0, **kwargs):
 		assert content
-		return store.add_file(
-			name="newpreview", file_name=file_name, file_url=f"/private/files/{file_name}",
-			attached_to_doctype=doctype, attached_to_name=name,
-			attached_to_field=kwargs.get("df"), is_private=is_private,
-		)
+		matches = store.select("File", {"content_hash": hashlib.md5(content).hexdigest(), "is_private": is_private})
+		return store.get_doc({
+			"doctype": "File", "content": content,
+			"file_name": matches[0].file_name if matches else file_name,
+			"attached_to_doctype": doctype, "attached_to_name": name,
+			"attached_to_field": kwargs.get("df"), "is_private": is_private,
+		}).insert(ignore_permissions=True)
 
 	file_manager.save_file = Mock(side_effect=save_file)
 	tool = types.ModuleType("flow.lib.tool")
@@ -306,7 +347,7 @@ def test_chat_preview_opens_its_exact_original_when_original_url_has_other_files
 	original = env.store.add_file(name="origfile01")
 	preview = add_preview(env)
 	result = env.media.get_chat_original(file=preview.file_url)
-	assert result == {"url": IMAGE_URL, "file_name": "shared-product.png"}
+	assert result == {"url": IMAGE_URL + "?fid=origfile01", "file_name": "shared-product.png"}
 	assert preview.permission_checks == ["read"]
 	assert original.permission_checks == ["read"]
 
@@ -335,9 +376,10 @@ def test_preview_cannot_resolve_an_original_from_another_attachment_scope(env, m
 def test_preview_cache_reuses_a_readable_preview_with_same_parent_and_privacy(env):
 	original = env.store.add_file(name="origfile01")
 	preview = add_preview(env)
-	assert env.ensure_preview(original) == preview.file_url
+	assert env.ensure_preview(original) == preview.file_url + "?fid=preview001"
 	assert preview.permission_checks == ["read"]
 	env.save_file.assert_not_called()
+	assert not env.store.inserted
 
 
 def test_preview_cache_checks_cached_file_read_permission(env):
@@ -348,6 +390,7 @@ def test_preview_cache_checks_cached_file_read_permission(env):
 	assert str(error.value).strip()
 	assert preview.permission_checks == ["read"]
 	env.save_file.assert_not_called()
+	assert not env.store.inserted
 
 
 @pytest.mark.parametrize("mismatch", ["doctype", "name", "privacy"])
@@ -360,6 +403,88 @@ def test_preview_cache_never_reuses_a_foreign_attachment(env, mismatch):
 	}[mismatch]
 	foreign = add_preview(env, **values)
 	foreign.file_url = "/private/files/foreign-preview.jpg" if foreign.is_private else "/files/foreign-preview.jpg"
-	assert env.ensure_preview(original) != foreign.file_url
+	url = env.ensure_preview(original)
+	assert urlsplit(url).path != foreign.file_url
 	assert not foreign.permission_checks
-	env.save_file.assert_called_once()
+	assert len(env.store.inserted) == 1
+	assert parse_qs(urlsplit(url).query) == {"fid": [env.store.inserted[0].name]}
+	env.save_file.assert_not_called()
+
+
+@pytest.mark.parametrize("same_parent", [True, False])
+@pytest.mark.parametrize("is_private", [0, 1])
+def test_native_preview_insert_preserves_identity_when_two_previews_share_bytes_and_url(env, same_parent, is_private):
+	url_prefix = "/private/files" if is_private else "/files"
+	originals = [
+		env.store.add_file(name="origfile01", file_url=f"{url_prefix}/original-one.png", is_private=is_private),
+		env.store.add_file(
+			name="origfile02", file_url=f"{url_prefix}/original-two.png", is_private=is_private,
+			attached_to_name="ITEM-001" if same_parent else "ITEM-002",
+		),
+	]
+	urls = [env.ensure_preview(original) for original in originals]
+	assert len(env.store.inserted) == 2
+	first, second = env.store.inserted
+	assert first.file_url == second.file_url
+	assert first.name != second.name
+	assert first.file_name == "chat-preview-origfile01.jpg"
+	assert second.file_name == "chat-preview-origfile02.jpg"
+	assert first.content_hash == second.content_hash
+	for original, preview, url in zip(originals, env.store.inserted, urls, strict=True):
+		assert urlsplit(url).path == preview.file_url
+		assert parse_qs(urlsplit(url).query) == {"fid": [preview.name]}
+		assert preview.attached_to_name == original.attached_to_name
+		assert preview.is_private == original.is_private
+		assert env.ensure_preview(original) == url
+		assert env.media.get_chat_original(file=url) == {
+			"url": original.file_url + f"?fid={original.name}", "file_name": original.file_name,
+		}
+	assert len(env.store.inserted) == 2
+	env.save_file.assert_not_called()
+
+
+@pytest.mark.parametrize("reference", [
+	IMAGE_URL + "?fid=missing001",
+	IMAGE_URL + "?fid=",
+	IMAGE_URL + "?fid=itemfile01&fid=itemfile01",
+	"/private/files/other.png?fid=itemfile01",
+	"https://foreign.example.test" + IMAGE_URL + "?fid=itemfile01",
+])
+def test_invalid_fid_url_never_falls_back_to_a_different_attachment(env, reference):
+	env.store.add_file()
+	env.store.add_file(name="otherfile1", file_url="/private/files/other.png")
+	with pytest.raises(ValidationError) as error:
+		env.media.get_chat_original(file=reference)
+	assert str(error.value).strip()
+
+
+def test_shared_url_with_fid_checks_the_identified_private_file_only(env):
+	duplicate_attachments(env)
+	with pytest.raises(PermissionError) as error:
+		env.media.get_chat_original(file=IMAGE_URL + "?fid=crmfile001")
+	assert str(error.value).strip()
+	assert not env.store.docs[("File", "itemfile01")].permission_checks
+	assert env.media.get_chat_original(file=IMAGE_URL + "?fid=itemfile01") == {
+		"url": IMAGE_URL + "?fid=itemfile01", "file_name": "shared-product.png",
+	}
+
+
+def test_fid_cannot_override_the_requested_document_scope(env):
+	env.store.add_document()
+	env.store.add_file()
+	env.store.add_file(name="otherfile1", attached_to_name="ITEM-002")
+	with pytest.raises(ValidationError):
+		env.images.show_image(
+			file=IMAGE_URL + "?fid=otherfile1", doctype="Item", name="ITEM-001", field="image",
+		)
+	env.preview.assert_not_called()
+
+
+def test_shared_preview_url_without_fid_requires_explicit_identity(env):
+	original = env.store.add_file(name="origfile01")
+	other = env.store.add_file(name="origfile02", attached_to_name="ITEM-002")
+	urls = [env.ensure_preview(doc) for doc in [original, other]]
+	assert urlsplit(urls[0]).path == urlsplit(urls[1]).path
+	with pytest.raises(ValidationError) as error:
+		env.media.get_chat_original(file=urlsplit(urls[0]).path)
+	assert str(error.value).strip()

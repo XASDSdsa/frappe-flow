@@ -28,9 +28,9 @@ function harness() {
   } };
   vm.runInNewContext(source, { window, document, URL, MutationObserver: class { observe() {} } });
   return { document, listeners, requests, imageLoads,
-    click() { const img = {src: 'https://erp.example.com/private/files/chat-preview-abc123def4.jpg', alt: 'flowimg:sample'};
+    click(src = 'https://erp.example.com/private/files/chat-preview-abc123def4.jpg') { const img = {src, alt: 'flowimg:sample'};
       listeners.click({target: {closest: () => img}, preventDefault() {}, stopPropagation() {}}); },
-    respond(ok=true) { completeRequest({ok, json: async () => ({message: {url: '/private/files/original.png'}})}); },
+    respond(ok=true, url='/private/files/original.png') { completeRequest({ok, json: async () => ({message: {url}})}); },
     overlay() { return document.getElementById('flow-image-preview'); },
   };
 }
@@ -47,6 +47,15 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   img.handlers.load(); assert.equal(img.hidden, false);
   assert.equal(normal.overlay().children[0].hidden, true);
   normal.listeners.keydown({key: 'Escape'}); assert.equal(normal.overlay(), undefined);
+  const scoped = harness();
+  scoped.click('https://erp.example.com/private/files/chat-preview-abc123def4.jpg?fid=preview001');
+  const request = new URL(scoped.requests[0][0], 'https://erp.example.com');
+  assert.equal(request.searchParams.get('file'), '/private/files/chat-preview-abc123def4.jpg?fid=preview001');
+  scoped.respond(true, '/private/files/original.png?fid=original001'); await flush();
+  const originalUrl = 'https://erp.example.com/private/files/original.png?fid=original001';
+  assert.deepEqual(scoped.imageLoads, [originalUrl]);
+  assert.equal(scoped.overlay().children.find(c => c.tagName === 'IMG').src, originalUrl);
+  assert.equal(scoped.overlay().children.find(c => c.tagName === 'A').href, originalUrl);
   const closed = harness(); closed.click(); closed.listeners.keydown({key: 'Escape'});
   closed.respond(); await flush(); assert.equal(closed.imageLoads.length, 0);
   const denied = harness(); denied.click(); denied.respond(false); await flush();
@@ -56,5 +65,5 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   unsupported.overlay().children.find(c => c.tagName === 'IMG').handlers.error();
   assert.match(unsupported.overlay().children[0].textContent, /打开原图/);
   assert.equal(unsupported.overlay().children.find(c => c.tagName === 'A').href, 'https://erp.example.com/private/files/original.png');
-  console.log('PASS: no eager request; click loads original; close cancels pending display; denied/missing image is explicit; unsupported image retains original link.');
+  console.log('PASS: no eager request; click loads original; file identity query survives request, image and link; close cancels pending display; denied/missing image is explicit; unsupported image retains original link.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

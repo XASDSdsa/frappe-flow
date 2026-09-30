@@ -82,7 +82,7 @@
 		}
 		const response = await origFetch(
 			"/api/method/flow.api.get_chat_original?file=" +
-			encodeURIComponent(url.pathname),
+			encodeURIComponent(url.pathname + url.search),
 			{ credentials: "same-origin" }
 		);
 		if (!response.ok) throw new Error("Original image unavailable");

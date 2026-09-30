@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from os.path import splitext
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 import frappe
 from frappe import _
@@ -29,9 +29,7 @@ def _file_url(file_url: str, is_private: int = 0, file_name: str | None = None) 
 
 def _ensure_chat_preview(doc) -> str:
 	"""Return a small same-permission JPEG for chat, keeping originals for click-to-open."""
-	from frappe.utils.file_manager import save_file
-
-	url = _file_url(doc.file_url, doc.is_private, doc.file_name)
+	url = _image_url(doc)
 	ext = splitext((doc.file_name or doc.file_url or "").split("?", 1)[0])[1].lower()
 	if (doc.file_name or "").startswith("chat-preview-") and ext in {".jpg", ".jpeg"}:
 		return url
@@ -54,7 +52,7 @@ def _ensure_chat_preview(doc) -> str:
 		match = re.fullmatch(re.escape(prefix) + r"([a-f0-9]{6})?\.jpg", preview.file_name or "")
 		if not match or (match[1] and match[1] != (preview.get("content_hash") or "")[-6:]):
 			frappe.throw(_("The original image for this preview could not be identified."))
-		return _file_url(preview.file_url, preview.is_private, preview.file_name)
+		return _image_url(preview)
 	try:
 		from io import BytesIO
 
@@ -66,17 +64,29 @@ def _ensure_chat_preview(doc) -> str:
 		image.thumbnail((_PREVIEW_MAX_PX, _PREVIEW_MAX_PX))
 		buf = BytesIO()
 		image.save(buf, format="JPEG", quality=72, optimize=True)
-		saved = save_file(
-			f"{prefix}.jpg",
-			buf.getvalue(),
-			doc.attached_to_doctype,
-			doc.attached_to_name,
-			is_private=int(doc.is_private or 0),
-		)
-		return _file_url(saved.file_url, saved.is_private, saved.file_name)
+		# File.insert reuses identical bytes without replacing our logical filename.
+		# file_manager.save_file also copies the old filename, losing the original ID.
+		saved = frappe.get_doc({
+			"doctype": "File",
+			"file_name": f"{prefix}.jpg",
+			"content": buf.getvalue(),
+			"attached_to_doctype": doc.attached_to_doctype,
+			"attached_to_name": doc.attached_to_name,
+			"is_private": int(doc.is_private or 0),
+		}).insert(ignore_permissions=True)
+		return _image_url(saved)
 	except Exception:
 		frappe.log_error(title="Flow chat image preview failed")
 		return url
+
+
+def _image_url(doc) -> str:
+	"""Keep native File identity even when content deduplication shares a URL."""
+	url = _file_url(doc.file_url, doc.is_private, doc.file_name)
+	parts = urlsplit(url)
+	query = parse_qs(parts.query, keep_blank_values=True)
+	query["fid"] = [doc.name]
+	return parts._replace(query=urlencode(query, doseq=True)).geturl()
 
 
 def _check_image_read(doc):
@@ -106,6 +116,17 @@ def _get_file(value: str, *, doctype: str | None = None, name: str | None = None
 		if field:
 			scope["attached_to_field"] = field
 	is_url = value.startswith(("/", "http://", "https://"))
+	if is_url:
+		path = _local_file_url(value)
+		query = parse_qs(urlsplit(value).query, keep_blank_values=True)
+		if "fid" in query:
+			ids = query["fid"]
+			if len(ids) != 1 or not ids[0] or not frappe.db.exists("File", ids[0]):
+				frappe.throw(_("Image attachment was not found."))
+			doc = _get_file(ids[0], doctype=doctype, name=name, field=field)
+			if unquote(_local_file_url(doc.file_url)) != unquote(path):
+				frappe.throw(_("The supplied file does not match the image in the requested document field."))
+			return doc
 	if not is_url and frappe.db.exists("File", value):
 		doc = _read_image_file(value)
 		if any(doc.get(key) != expected for key, expected in scope.items()):
@@ -153,9 +174,9 @@ def _image_file_from_doc(doctype: str, name: str, field: str | None = None, file
 def get_chat_original(file: str) -> dict[str, str]:
 	"""Resolve a chat preview to its original File after checking read permission."""
 	url = _local_file_url(file)
-	doc = _get_file(url)
+	doc = _get_file(file)
 	if not doc and unquote(url) != url:
-		doc = _get_file(unquote(url))
+		doc = _get_file(unquote(file))
 	if not doc:
 		frappe.throw(_("Image attachment was not found."))
 	if (doc.file_name or "").startswith("chat-preview-"):
@@ -172,7 +193,7 @@ def get_chat_original(file: str) -> dict[str, str]:
 		):
 			frappe.throw(_("The original image for this preview could not be identified."))
 		doc = original
-	url = _file_url(doc.file_url, doc.is_private, doc.file_name)
+	url = _image_url(doc)
 	if not _looks_like_image(doc.file_name or url):
 		frappe.throw(_("This attachment is not an image."))
 	return {"url": url, "file_name": doc.file_name}
