@@ -26,6 +26,13 @@ def preview():
     }}
 
 
+def test_guidance_allows_currency_to_be_derived_from_existing_defaults(monkeypatch):
+    monkeypatch.setitem(sys.modules, "frappe", types.ModuleType("frappe"))
+    module = load("customer_install_guidance_test", "flow/integrations/erpnext/customer_install.py")
+    assert "已有可用的用户或系统默认值时由后端自动带入" in module.DETAILS
+    assert "只有没有可用默认值时才补问币种" in module.DETAILS
+
+
 def test_forwarder_review_shows_true_customer_and_receiver_separately():
     module = load("customer_review_test", "flow/integrations/erpnext/customer_profile_review.py")
     result = module.render_customer_review(preview())
