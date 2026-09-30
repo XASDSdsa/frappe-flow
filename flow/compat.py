@@ -518,7 +518,14 @@ def _markdown_from_show_image(result: Any) -> str:
 		return ""
 	markdown = (data.get("markdown") or "").strip()
 	if markdown:
-		return markdown
+		match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", markdown)
+		if not match:
+			return markdown
+		alt, url = match.groups()
+		alt = alt.strip() or "image"
+		if not alt.startswith("flowimg:"):
+			alt = f"flowimg:{alt}"
+		return f"![{alt}]({url})"
 	url = (data.get("url") or "").strip()
 	if not url:
 		return ""

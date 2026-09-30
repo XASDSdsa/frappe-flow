@@ -69,3 +69,13 @@ def test_show_image_preview_is_persisted_on_final_assistant_message(monkeypatch)
 
 	assert markdown not in (messages[0]["content"] or "")
 	assert messages[-1]["content"].count(markdown) == 1
+
+
+def test_show_image_markdown_gets_the_trusted_flow_prefix(monkeypatch):
+	module = load_compat(monkeypatch)
+
+	result = module._markdown_from_show_image(
+		{"markdown": "![sticker](/private/files/chat-preview.jpg?fid=file-1)"}
+	)
+
+	assert result == "![flowimg:sticker](/private/files/chat-preview.jpg?fid=file-1)"
