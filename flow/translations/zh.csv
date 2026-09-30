@@ -434,3 +434,12 @@ Unknown fields for {0}: {1},{0} 中存在未知字段：{1}
 Tools,工具
 Searching Knowledge,正在检索知识库
 Running Document Actions,正在执行单据操作
+Multiple image previews match this attachment. The attachment needs review.,该附件对应多个图片预览，请核查附件关联。
+You do not have permission to read this image or its document.,当前账号无权读取这张图片或其关联单据。
+The image attachment does not belong to the requested document field.,这张图片附件不属于指定单据的图片字段。
+"Multiple image attachments match. Specify the document and image field, or an exact File ID.",图片引用对应多个附件，请指定单据和图片字段，或提供准确的附件编号。
+Image field {0} does not exist on {1}.,{1} 不存在图片字段 {0}。
+No image is set in the requested document field.,指定单据的图片字段尚未设置图片。
+Image attachment was not found for the requested document field.,未找到属于指定单据图片字段的附件，请核对附件关联。
+The supplied file does not match the image in the requested document field.,提供的文件与指定单据图片字段中的图片不一致。
+Both DocType and document name are required for a document image.,查看单据图片时，必须同时指定单据类型和单据编号。

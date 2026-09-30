@@ -11,7 +11,6 @@ from frappe import _
 from frappe.utils import get_url
 
 _IMAGE_EXTENSIONS = {".apng", ".avif", ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
-_IMAGE_FIELDS = ("image", "website_image", "photo", "product_image")
 _PREVIEW_MAX_PX = 720
 
 
@@ -39,13 +38,23 @@ def _ensure_chat_preview(doc) -> str:
 	prefix = f"chat-preview-{doc.name}"
 	existing = frappe.get_all(
 		"File",
-		filters={"file_name": ("like", prefix + "%")},
-		fields=["file_url", "is_private", "file_name"],
-		limit=1,
+		filters={
+			"file_name": ("like", prefix + "%"),
+			"attached_to_doctype": doc.attached_to_doctype,
+			"attached_to_name": doc.attached_to_name,
+			"is_private": int(doc.is_private or 0),
+		},
+		pluck="name",
+		limit_page_length=2,
 	)
+	if len(existing) > 1:
+		frappe.throw(_("Multiple image previews match this attachment. The attachment needs review."))
 	if existing:
-		row = existing[0]
-		return _file_url(row.file_url, row.is_private, row.file_name)
+		preview = _read_image_file(existing[0])
+		match = re.fullmatch(re.escape(prefix) + r"([a-f0-9]{6})?\.jpg", preview.file_name or "")
+		if not match or (match[1] and match[1] != (preview.get("content_hash") or "")[-6:]):
+			frappe.throw(_("The original image for this preview could not be identified."))
+		return _file_url(preview.file_url, preview.is_private, preview.file_name)
 	try:
 		from io import BytesIO
 
@@ -70,21 +79,46 @@ def _ensure_chat_preview(doc) -> str:
 		return url
 
 
-def _get_file(value: str):
+def _check_image_read(doc):
+	try:
+		doc.check_permission("read")
+	except frappe.PermissionError:
+		frappe.throw(_("You do not have permission to read this image or its document."), frappe.PermissionError)
+	return doc
+
+
+def _read_image_file(name: str):
+	return _check_image_read(frappe.get_doc("File", name))
+
+
+def _get_file(value: str, *, doctype: str | None = None, name: str | None = None, field: str | None = None):
+	"""Resolve an exact File ID or an unambiguous, optionally document-scoped reference.
+
+	A file_url is not a File identity: native integrations reuse its bytes through
+	separate attachment records. Never let another document's record win by row order.
+	"""
 	value = (value or "").strip()
 	if not value:
 		return None
-	if frappe.db.exists("File", value):
-		doc = frappe.get_doc("File", value)
-		doc.check_permission("read")
+	scope = {}
+	if doctype and name:
+		scope = {"attached_to_doctype": doctype, "attached_to_name": name}
+		if field:
+			scope["attached_to_field"] = field
+	is_url = value.startswith(("/", "http://", "https://"))
+	if not is_url and frappe.db.exists("File", value):
+		doc = _read_image_file(value)
+		if any(doc.get(key) != expected for key, expected in scope.items()):
+			frappe.throw(_("The image attachment does not belong to the requested document field."))
 		return doc
-	for filters in ({"file_url": value}, {"file_name": value}):
-		name = frappe.db.get_value("File", filters, "name")
-		if name:
-			doc = frappe.get_doc("File", name)
-			doc.check_permission("read")
-			return doc
-	return None
+	if is_url:
+		filters = {"file_url": _local_file_url(value), **scope}
+	else:
+		filters = {"file_name": value, **scope}
+	matches = frappe.get_all("File", filters=filters, pluck="name", limit_page_length=2)
+	if len(matches) > 1:
+		frappe.throw(_("Multiple image attachments match. Specify the document and image field, or an exact File ID."))
+	return _read_image_file(matches[0]) if matches else None
 
 
 def _local_file_url(value: str) -> str:
@@ -98,40 +132,21 @@ def _local_file_url(value: str) -> str:
 	return path
 
 
-def _display_url(value: str | None, file_name: str | None = None) -> tuple[str | None, str | None]:
+def _image_file_from_doc(doctype: str, name: str, field: str | None = None, file: str | None = None):
+	"""Keep the document/field identity through lookup, preview and permission checks."""
+	doc = _check_image_read(frappe.get_doc(doctype, name))
+	field = (field or "image").strip()
+	if not doc.meta.has_field(field):
+		frappe.throw(_("Image field {0} does not exist on {1}.").format(field, doctype))
+	value = str(doc.get(field) or "").strip()
 	if not value:
-		return None, file_name
-	doc = _get_file(value) or _get_file(file_name or "")
-	if doc:
-		return _ensure_chat_preview(doc), doc.file_name or file_name
-	return None, file_name
-
-
-def _image_from_doc(doctype: str, name: str, field: str | None) -> str | None:
-	meta = frappe.get_meta(doctype)
-	if not meta:
-		frappe.throw(_("DocType {0} was not found.").format(doctype))
-	doc = frappe.get_doc(doctype, name)
-	doc.check_permission("read")
-	fields = [field] if (field or "").strip() else [f for f in _IMAGE_FIELDS if meta.has_field(f)]
-	for fname in fields:
-		if not fname or not meta.has_field(fname):
-			continue
-		value = doc.get(fname)
-		if value:
-			return str(value).strip()
-	rows = frappe.get_all(
-		"File",
-		filters={"attached_to_doctype": doctype, "attached_to_name": name},
-		fields=["name", "file_url", "file_name", "is_private"],
-		order_by="creation desc",
-		limit=20,
-	)
-	for row in rows:
-		url = _file_url(row.file_url, row.is_private, row.file_name)
-		if _looks_like_image(url) or _looks_like_image(row.file_name or ""):
-			return url
-	return None
+		frappe.throw(_("No image is set in the requested document field."))
+	attachment = _get_file(file or value, doctype=doctype, name=name, field=field)
+	if not attachment:
+		frappe.throw(_("Image attachment was not found for the requested document field."))
+	if _local_file_url(attachment.file_url) != _local_file_url(value):
+		frappe.throw(_("The supplied file does not match the image in the requested document field."))
+	return attachment
 
 
 @frappe.whitelist()
@@ -150,9 +165,11 @@ def get_chat_original(file: str) -> dict[str, str]:
 		original_name = match[1]
 		if not frappe.db.exists("File", original_name):
 			frappe.throw(_("The original image attachment no longer exists."))
-		original = frappe.get_doc("File", original_name)
-		original.check_permission("read")
-		if any((original.get(field) or "") != (doc.get(field) or "") for field in ("attached_to_doctype", "attached_to_name")):
+		original = _read_image_file(original_name)
+		if (
+			any((original.get(field) or "") != (doc.get(field) or "") for field in ("attached_to_doctype", "attached_to_name"))
+			or bool(original.is_private) != bool(doc.is_private)
+		):
 			frappe.throw(_("The original image for this preview could not be identified."))
 		doc = original
 	url = _file_url(doc.file_url, doc.is_private, doc.file_name)
