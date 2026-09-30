@@ -94,6 +94,10 @@ def _heartbeat_stream(chunks, interval: float = _HEARTBEAT_SECONDS):
 _TOOL_HISTORY_KEEP = 6
 _TOOL_HISTORY_LIMIT = 2000
 _TOOL_HISTORY_KEEP_LIMIT = 4000
+# These tools return a complete business document by contract. Truncating their
+# JSON changes the data the model is asked to summarize, so preserve the result
+# while keeping the normal budget for exploratory and legacy tools.
+_COMPLETE_TOOL_HISTORY_NAMES = frozenset({"query_sales_order_details"})
 _DESCRIBE_FIELD_CAP = 28
 _DESCRIBE_KEEP_FIELDS = {
 	"name",
@@ -188,6 +192,13 @@ def _compact_tool_history(messages: Any) -> Any:
 	"""Old tool payloads bloat the prompt until the SSE fetch dies before the first token."""
 	if not isinstance(messages, list):
 		return messages
+	tool_names = {
+		call.get("id"): (call.get("function") or {}).get("name")
+		for message in messages
+		if isinstance(message, dict) and message.get("role") == "assistant"
+		for call in (message.get("tool_calls") or [])
+		if isinstance(call, dict) and call.get("id")
+	}
 	tool_idxs = [
 		i
 		for i, message in enumerate(messages)
@@ -201,6 +212,9 @@ def _compact_tool_history(messages: Any) -> Any:
 			continue
 		content = message.get("content") or ""
 		if not isinstance(content, str):
+			out.append(message)
+			continue
+		if tool_names.get(message.get("tool_call_id")) in _COMPLETE_TOOL_HISTORY_NAMES:
 			out.append(message)
 			continue
 		slim = _slim_describe_json(content)

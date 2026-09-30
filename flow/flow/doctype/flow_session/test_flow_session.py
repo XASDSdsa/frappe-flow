@@ -315,6 +315,30 @@ class TestBuildPromptMessages(IntegrationTestCase):
 		content = next(m for m in s._build_prompt_messages() if m["role"] == "user")["content"]
 		self.assertEqual(content, "hello")
 
+	def test_existing_session_refreshes_generated_system_routing(self):
+		s = frappe.get_doc({"doctype": "Flow Session"}).insert(ignore_permissions=True)
+		s._snapshot = {"model": None}
+		s._runtime = SimpleNamespace(instructions="CURRENT ROUTING")
+		s.append("messages", {"role": "system", "content": "OLD ROUTING", "run": None})
+		s.append("messages", {"role": "user", "content": "看看最新订单", "run": None})
+		s.save(ignore_permissions=True)
+
+		messages = s._build_prompt_messages()
+
+		assert messages[0] == {"role": "system", "content": "CURRENT ROUTING"}
+		assert messages[1] == {"role": "user", "content": "看看最新订单"}
+
+	def test_session_without_saved_system_gets_current_routing(self):
+		s = frappe.get_doc({"doctype": "Flow Session"}).insert(ignore_permissions=True)
+		s._snapshot = {"model": None}
+		s._runtime = SimpleNamespace(instructions="CURRENT ROUTING")
+		s.append("messages", {"role": "user", "content": "你好", "run": None})
+		s.save(ignore_permissions=True)
+
+		messages = s._build_prompt_messages()
+
+		assert messages[0] == {"role": "system", "content": "CURRENT ROUTING"}
+
 
 class TestIndexRetrievalAttachments(IntegrationTestCase):
 	def setUp(self):
