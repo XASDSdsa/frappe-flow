@@ -1,5 +1,5 @@
 (() => {
-	const GUARD = 13;
+	const GUARD = 14;
 	if (window.__flowPanelGuardVersion >= GUARD) return;
 	const origFetch = (window.__flowOrigFetch || window.fetch).bind(window);
 	window.__flowOrigFetch = origFetch;

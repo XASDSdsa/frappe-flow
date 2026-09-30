@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../flow/public/flow_assets/flow_panel_guard.js'), 'utf8');
-function harness() {
+function harness(initialGuard = 0) {
   const listeners = {}, requests = [], imageLoads = [];
   let completeRequest;
   class Element {
@@ -26,8 +26,9 @@ function harness() {
   const window = { location: new URL('https://erp.example.com/app'), fetch: (...args) => {
     requests.push(args); return new Promise(resolve => { completeRequest = resolve; });
   } };
+  if (initialGuard) window.__flowPanelGuardVersion = initialGuard;
   vm.runInNewContext(source, { window, document, URL, MutationObserver: class { observe() {} } });
-  return { document, listeners, requests, imageLoads,
+  return { document, listeners, requests, imageLoads, window,
     click(src = 'https://erp.example.com/private/files/chat-preview-abc123def4.jpg') { const img = {src, alt: 'flowimg:sample'};
       listeners.click({target: {closest: () => img}, preventDefault() {}, stopPropagation() {}}); },
     respond(ok=true, url='/private/files/original.png') { completeRequest({ok, json: async () => ({message: {url}})}); },
@@ -56,6 +57,13 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(scoped.imageLoads, [originalUrl]);
   assert.equal(scoped.overlay().children.find(c => c.tagName === 'IMG').src, originalUrl);
   assert.equal(scoped.overlay().children.find(c => c.tagName === 'A').href, originalUrl);
+  const upgraded = harness(13);
+  assert.equal(upgraded.window.__flowPanelGuardVersion, 14);
+  upgraded.click('https://erp.example.com/private/files/chat-preview-abc123def4.jpg?fid=preview001');
+  const upgradedRequest = new URL(upgraded.requests[0][0], 'https://erp.example.com');
+  assert.equal(upgradedRequest.searchParams.get('file'), '/private/files/chat-preview-abc123def4.jpg?fid=preview001');
+  upgraded.respond(true, '/private/files/original.png?fid=original001'); await flush();
+  assert.deepEqual(upgraded.imageLoads, ['https://erp.example.com/private/files/original.png?fid=original001']);
   const closed = harness(); closed.click(); closed.listeners.keydown({key: 'Escape'});
   closed.respond(); await flush(); assert.equal(closed.imageLoads.length, 0);
   const denied = harness(); denied.click(); denied.respond(false); await flush();
