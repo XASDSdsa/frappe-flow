@@ -1,6 +1,8 @@
-"""Synchronize Flow tool registrations and guidance without customer setup.
+"""Maintain Flow-owned ERPNext tool definitions, guidance and agent bindings.
 
-Native address, territory and permission prerequisites remain explicit setup.
+Workflow synchronization never installs an app or changes ERPNext business data,
+schema or permissions. Customer prerequisites remain an explicit setup operation.
+The legacy-path migration below preserves existing tool settings and identities.
 """
 
 import json
@@ -28,7 +30,9 @@ def ensure_workflow_tools(enable: bool = True):
 
 	from .customer_install import install_customer_tools
 	from .delivery_note_install import install_delivery_note_tools
+	from .document_submission_install import install_document_submission_tools
 	from .finance_flow_install import install_finance_tools
+	from .inventory_install import install_inventory_tools
 	from .sales_order_install import install_sales_order_query_tool, install_sales_order_tools
 	from .sticker_install import install_sticker_tool
 
@@ -38,7 +42,9 @@ def ensure_workflow_tools(enable: bool = True):
 		"sales_order": install_sales_order_tools(enable=enable),
 		"sales_order_query": install_sales_order_query_tool(enable=enable),
 		"delivery_note": install_delivery_note_tools(enable=enable),
+		"document_submission": install_document_submission_tools(enable=enable),
 		"finance": install_finance_tools(enable=enable),
+		"inventory": install_inventory_tools(enable=enable),
 	}
 
 	# SF is one shipping provider. Its Flow wrappers stay in Flow, but they are

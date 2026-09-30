@@ -42,7 +42,7 @@ REPLY_STYLE_HINT = (
 DAILY_ROUTING_MARKER = "日常业务工具优先规则："
 DAILY_ROUTING_HINT = (
     DAILY_ROUTING_MARKER
-    + "客户建档、客户贴纸、销售订单、出库、顺丰面单/物流、PayPal、采购入库和销售开票等已知业务，先调用对应的专用 Imported 工具；"
+    + "客户建档、客户贴纸、销售订单、出库、库存/物料/供应商查询、顺丰面单/物流、PayPal、采购入库和销售开票等已知业务，先调用对应的专用 Imported 工具；"
     "已知业务对象不要先调用 find_doctypes 或 describe，也不要用 execute、create、update、delete 绕过专用流程写入客户、订单、出库、物流或财务单据。"
     "只有没有对应专用工具、用户明确要求通用系统查询，或专用工具明确说明不支持时，才使用通用工具；已经取得的 DocType、字段或记录不要重复探索。"
     "专用流程按预检/候选、一次完整审核、一次批准执行；不要把一个业务动作拆成多次通用写入，也不要增加第二次确认。"

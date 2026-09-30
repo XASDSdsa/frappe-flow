@@ -6,11 +6,11 @@ import re
 import frappe
 from flow.integrations.erpnext.flow_reply_style import with_reply_style
 
-MODULES = ('purchase_receipt_flow', 'sales_invoice_flow')
+MODULES = ('purchase_order_flow', 'purchase_receipt_flow', 'sales_invoice_flow')
 HINT_MARKER = '采购开票工具规则：'
 LEGACY_HINT_MARKER = '采购开票与贴纸利润工具规则：'
 HINT = (HINT_MARKER + '先客户档案、客户贴纸物料、销售订单及收款，再按实际贴纸到货办理采购入库，库存满足后出库；不能为了出库伪造采购成本或到货。'
-    '采购用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt；开票用get_sales_invoice_options→preview_sales_invoice→save_sales_invoice。'
+    '采购先用preview_purchase_order→save_purchase_order创建采购订单；到货再用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt；开票用get_sales_invoice_options→preview_sales_invoice→save_sales_invoice。'
     '缺项集中询问一次，沿用本轮已知资料，不重复要求账号；默认仓库大坪仓库 - LEYA并在审核卡列出。'
     '采购必须真实供应商、数量和采购价，成本不从售价或客户定制费猜测；只有用户明确实际已到货并要求提交才用actual_receipt=true、submit=true。'
     '销售开票沿用原单价格、税费和预收抵扣，已有草稿也占用待开票数量；不再扣库存或登记第二次收款。'

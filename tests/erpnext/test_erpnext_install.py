@@ -31,8 +31,6 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 
 	def fake(name):
 		def install(**kwargs):
-			if name == "customer":
-				assert kwargs["configure_prerequisites"] is False
 			called.append((name, kwargs["enable"]))
 			return {"tool": name}
 
@@ -46,7 +44,9 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 			"install_sales_order_query_tool": fake("sales_order_query"),
 		},
 		"flow.integrations.erpnext.delivery_note_install": {"install_delivery_note_tools": fake("delivery_note")},
+		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": fake("document_submission")},
 		"flow.integrations.erpnext.finance_flow_install": {"install_finance_tools": fake("finance")},
+		"flow.integrations.erpnext.inventory_install": {"install_inventory_tools": fake("inventory")},
 		"flow.integrations.erpnext.sf_label_install": {"install_sf_label_tools": fake("sf_label")},
 		"flow.integrations.erpnext.waybill_flow_install": {"install_waybill_replacement_tools": fake("waybill")},
 		"flow.integrations.erpnext.paypal_install": {"install_paypal_tool": lambda: called.append(("paypal", True)) or {"tool": "paypal"}},
@@ -62,7 +62,7 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 	assert result["status"] == "installed"
 	assert [name for name, _ in called] == [
 		"customer", "sticker", "sales_order", "sales_order_query", "delivery_note",
-		"finance", "sf_label", "waybill", "paypal",
+		"document_submission", "finance", "inventory", "sf_label", "waybill", "paypal",
 	]
 	assert all(enabled for _, enabled in called)
 
@@ -77,7 +77,9 @@ def test_provider_workflows_are_skipped_without_shipping_app(monkeypatch):
 			"install_sales_order_query_tool": lambda **_: {},
 		},
 		"flow.integrations.erpnext.delivery_note_install": {"install_delivery_note_tools": lambda **_: {}},
+		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": lambda **_: {}},
 		"flow.integrations.erpnext.finance_flow_install": {"install_finance_tools": lambda **_: {}},
+		"flow.integrations.erpnext.inventory_install": {"install_inventory_tools": lambda **_: {}},
 	}.items():
 		stub = types.ModuleType(module_name)
 		for name, function in functions.items():

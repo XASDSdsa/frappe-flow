@@ -19,6 +19,7 @@ from .sales_order_flow import _actor, _scope, _hash, _json, _without_price_maint
 VERSION = 1
 TTL = 1800
 KINDS = {
+    "purchase_order": "Purchase Order",
     "purchase_receipt": "Purchase Receipt",
     "sales_invoice": "Sales Invoice",
 }
