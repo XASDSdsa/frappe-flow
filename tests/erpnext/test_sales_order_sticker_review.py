@@ -56,6 +56,34 @@ def resolved_rows():
              "sticker_model": "Green", "sticker_version": "v1"}]
 
 
+@pytest.mark.parametrize("row_type, expected", [("product", "尚未选择贴纸"), ("bundle", "已选择贴纸"),
+                                               ("standalone_sticker", "已选择贴纸")])
+def test_first_order_sticker_choice_appears_in_overall_approval(flow, row_type, expected):
+    module, harness = flow
+    harness.frappe.get_list = Mock(return_value=[])
+    summary = module._summary(native_order([native_row("row", "GREEN", 120, 3)]),
+                              {"items": [{"item_code": "GREEN", "row_type": row_type}]})
+    fingerprint = module._hash(summary)
+    review = module._first_order_sticker_review(summary)
+    harness.frappe.get_list.assert_called_once_with(
+        "Sales Order", filters={"customer": "CUSTOMER", "docstatus": ["!=", 2]},
+        fields=["name"], limit_page_length=1)
+    module._load_plan = lambda _token: {"summary": summary, "sticker_service_review": review}
+    card = module._confirmation_prompt({"preview_token": "trusted-token"})
+    assert "⚠️ **首单贴纸服务选择**" in card
+    assert expected in card and "不额外确认" in card
+    assert module._hash(summary) == fingerprint
+
+
+def test_existing_order_suppresses_first_order_reminder_and_permission_failure_is_explicit(flow):
+    module, harness = flow
+    summary = {"customer": "CUSTOMER", "items": []}
+    harness.frappe.get_list = Mock(return_value=[{"name": "EXISTING-DRAFT"}])
+    assert module._first_order_sticker_review(summary) is None
+    harness.frappe.get_list.side_effect = PermissionError("restricted")
+    assert "无法确认是否首单" in module._first_order_sticker_review(summary)["message"]
+
+
 def test_approval_card_separates_both_sticker_kinds_and_shows_warning_from_trusted_summary(flow):
     module, _ = flow
     order = native_order([native_row("independent", "STICKER", 1000, .1),

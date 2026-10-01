@@ -463,6 +463,28 @@ def _resolve(request):
         "customer", "items", "company", "currency", "delivery_date", "delivery_days", "stickers_free", "sticker_mappings", "include_stickers", "base_date", "bundle_mappings")})
 
 
+def _first_order_sticker_review(summary):
+    """Read-only advice, separate from the order fingerprint and monetary review.
+
+    Drafts count as existing orders; cancelled orders do not. Permission-filtered
+    history only establishes what this operator can see, not global first-order status.
+    """
+    try:
+        orders = frappe.get_list("Sales Order", filters={"customer": summary["customer"], "docstatus": ["!=", 2]},
+                                 fields=["name"], limit_page_length=1)
+    except frappe.PermissionError:
+        basis = "无权读取历史订单，无法确认是否首单。"
+    else:
+        if orders:
+            return None
+        basis = "当前账号未查到该客户未取消的历史订单，按首单提醒。"
+    selected = any(row["row_type"] in {"bundle", "sticker", "standalone_sticker"} for row in summary["items"])
+    choice = ("已选择贴纸：请核对对应商品、贴纸型号／版本和数量。" if selected else
+              "尚未选择贴纸：请核对本单需要客户贴纸还是不需要；需要时补齐贴纸物料并重新预检。")
+    return {"title": "首单贴纸服务选择", "message": basis + "\n" + choice +
+            "\n贴纸单价为0元；定制服务费仅按已约定金额另列。随整单审核，不额外确认、不自动添加物料或收费。"}
+
+
 def _error(exc, steps, stage, *, rolled_back=False):
     message = strip_html(str(exc)) or "处理失败，请管理员核对系统错误日志。"
     _mark(steps, stage, "failed", message)
@@ -488,6 +510,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
     bundle_mappings=[{product_row:1,sticker_row:2}]明确同单搭配，均为原items行号。
     独立/备用贴纸行传standalone=true。组合需一颗巧克粉一张贴纸，歧义集中询问。
     没提到贴纸不自动添加。预检不保留物料或单据写入，批准一次后创建/复用原生产品组合。
+    当前账号未查到客户未取消历史订单时，整体审核卡片提醒选择贴纸服务；无权核实会明确说明。
     业务顺序：先客户档案，再客户贴纸物料，最后销售订单。交期默认自然日七天后当天23:59。
     不要求提供本人姓名、邮箱或销售员。默认创建草稿。new_order 仅用于用户明确要求另开相同新单。
     """
@@ -527,12 +550,15 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         # The same reviewed request receives the same key even when two preview
         # workers race. Explicit second-order intent gets a distinct identity.
         token = uuid.uuid4().hex if new_order else fingerprint[:32]
+        sticker_service_review = _first_order_sticker_review(summary)
         plan = {"version": VERSION, "user": user, "scope": scope, "site": frappe.local.site,
                 "request": request, "resolved": resolved, "summary": summary, "bundles": bundles, "fingerprint": fingerprint,
+                "sticker_service_review": sticker_service_review,
                 "expires_at": str(now_datetime() + timedelta(seconds=TTL))}
         frappe.cache.set_value(_cache_key(token), plan, expires_in_sec=TTL)
         _mark(steps, "approval", "needs_confirmation", "预检完成，尚未保存；核对摘要后批准一次即可创建草稿。")
         return {"status": "preview", "verified": False, "preview_token": token, "summary": summary,
+                "sticker_service_review": sticker_service_review,
                 "warnings": summary["warnings"],
                 "expires_at": plan["expires_at"], "steps": steps,
                 "defaults_used": {"sales_person": resolved["sales_team"][0]["sales_person"], "allocated_percentage": 100,
@@ -657,6 +683,8 @@ def _confirmation_prompt(args):
         bundle_actions = {b["item_code"]: b["disposition"] for b in plan.get("bundles", [])}
         summary = plan["summary"]
         lines = ["🔵 请整体审核：销售订单草稿（尚未保存）", "", "客户：" + summary["customer_name"]]
+        if review := plan.get("sticker_service_review"):
+            lines.extend(["", "⚠️ **" + review["title"] + "**", review["message"]])
         for warning in summary.get("warnings", []):
             lines.extend(["", "⚠️ **重点审核：独立销售贴纸**", warning["message"]])
         for kind, heading in (("bundle", "【组合商品：巧克粉＋客户贴纸】"), ("product", "【商品】"), ("sticker", "【配套贴纸】"),
