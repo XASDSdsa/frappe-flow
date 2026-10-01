@@ -21,9 +21,9 @@ DEFAULT_WAREHOUSE = "大坪仓库 - LEYA"
 REQUEST_FIELDS = {
     "purchase_order", "source_revision", "supplier", "company", "currency", "customer",
     "posting_date", "supplier_reference", "supplier_invoice", "warehouse", "items",
-    "existing_document", "submit", "actual_receipt", "new_request",
+    "existing_document", "submit", "actual_receipt", "new_request", "zero_valuation_reason",
 }
-EXISTING_FIELDS = {"existing_document", "submit", "actual_receipt", "new_request"}
+EXISTING_FIELDS = {"existing_document", "submit", "actual_receipt", "new_request", "zero_valuation_reason"}
 
 
 def _number(value, label, *, zero=False):
@@ -34,8 +34,15 @@ def _number(value, label, *, zero=False):
     except (ValueError, TypeError, OverflowError):
         raise InputError(f"{label}必须是明确的有限数字。", [label]) from None
     if not math.isfinite(result) or (result < 0 if zero else result <= 0):
-        raise InputError(f"{label}必须是有限{'非负' if zero else '正'}数，不能用零估值代替真实成本。", [label])
+        raise InputError(f"{label}必须是有限{'非负' if zero else '正'}数。", [label])
     return result
+
+
+def _cost(value, reason=""):
+    rate = _number(value, "实际采购单位成本", zero=True)
+    if rate == 0 and not reason:
+        raise InputError("零成本入库须说明原因，例如贴纸服务成本已另行入账；未知成本不能填0。", ["zero_valuation_reason"])
+    return rate
 
 
 def _text(value, field, *, optional=False):
@@ -68,6 +75,8 @@ def _request(request):
         if key in result and type(result[key]) is not bool:
             raise InputError(key + " 必须为 true 或 false。", [key])
     result.setdefault("submit", False)
+    if "zero_valuation_reason" in result:
+        _text(result["zero_valuation_reason"], "zero_valuation_reason")
     if result["submit"] and result.get("actual_receipt") is not True:
         raise InputError("提交入库必须由用户明确确认本批实际已到货；请核对后提供 actual_receipt=true，再整体审核批准。", ["actual_receipt"])
     if result.get("existing_document"):
@@ -113,7 +122,10 @@ def _request(request):
                 if field == "rate" and result.get("purchase_order") and field not in row:
                     continue
                 try:
-                    _number(row.get(field), "实际合格收货数量" if field == "qty" else "实际采购单位成本")
+                    if field == "rate":
+                        _cost(row.get(field), result.get("zero_valuation_reason", ""))
+                    else:
+                        _number(row.get(field), "实际合格收货数量")
                 except InputError as exc:
                     missing.append(prefix + "." + field)
                     reasons.append(f"第 {index} 行：{exc}")
@@ -238,7 +250,7 @@ def _company(explicit):
     return _read("Company", name)
 
 
-def _select(rows, requested):
+def _select(rows, requested, zero_valuation_reason=""):
     available = {row["purchase_order_item"]: row for row in rows}
     selected = []
     seen = set()
@@ -256,7 +268,7 @@ def _select(rows, requested):
         if row["blocked_reason"] or qty > row["available_qty"] + 0.000001:
             raise InputError(row["blocked_reason"] or
                 f"采购第 {row['row_no']} 行当前最多可收 {row['available_qty']:g} {row['uom']}（已扣除其他草稿）；请重新核对数量。", ["items"])
-        selected.append({**row, "qty": qty, "rate": _number(choice.get("rate", row["rate"]), "实际采购单位成本"),
+        selected.append({**row, "qty": qty, "rate": _cost(choice.get("rate", row["rate"]), zero_valuation_reason),
                          "warehouse": choice.get("warehouse")})
     return selected
 
@@ -279,11 +291,11 @@ def _check_document(doc, request):
         if any(row.get(key) for key in ("serial_no", "batch_no", "serial_and_batch_bundle", "rejected_qty",
                 "landed_cost_voucher_amount", "from_warehouse", "purchase_invoice", "purchase_invoice_item")):
             raise InputError("收货明细涉及批次序列号、拒收、后加成本、仓间转移或采购发票关联，请在原生页面处理。", ["items"])
-        if row.get("allow_zero_valuation_rate"):
-            raise InputError("不能通过零估值许可入库，请补齐真实采购成本。", ["items"])
         item, _ = _item(row.item_code, request.get("customer"))
         _number(row.qty, "实际合格收货数量")
-        _number(row.rate, "实际采购单位成本")
+        rate = _cost(row.rate, request.get("zero_valuation_reason", ""))
+        if rate == 0 and not row.get("allow_zero_valuation_rate"):
+            raise InputError("零成本明细须在原单明确启用允许零估值，再整体审核。", ["items"])
         _number(row.conversion_factor, "库存单位换算")
         if row.get("received_qty") and abs(float(row.received_qty) - float(row.qty)) > 0.000001:
             raise InputError("实际收货数与合格数量不一致，请在原生页面核对拒收明细。", ["items"])
@@ -321,7 +333,10 @@ def _validate_native(doc, request):
     _number(doc.conversion_rate, "公司本位币汇率")
     for row in doc.get("items"):
         if frappe.get_cached_value("Item", row.item_code, "is_stock_item"):
-            _number(row.valuation_rate, "实际库存单位估值")
+            zero = float(row.rate) == 0 and bool(request.get("zero_valuation_reason"))
+            valuation = _number(row.valuation_rate, "实际库存单位估值", zero=zero)
+            if zero and valuation != 0:
+                raise InputError("已选择零成本入库，但税费或原生估值仍计入库存成本，请核对后重新预检。", ["items"])
     return doc
 
 
@@ -345,7 +360,11 @@ def _existing(request, for_update):
             raise InputError("草稿与来源采购订单的供应商、公司或币种不一致。", ["existing_document"])
         _select(rows, [{"purchase_order_item": r.purchase_order_item, "item_code": r.item_code,
                        "qty": r.qty, "uom": r.uom, "rate": r.rate}
-                      for r in doc.get("items") if r.get("purchase_order") == source])
+                      for r in doc.get("items") if r.get("purchase_order") == source], request.get("zero_valuation_reason", ""))
+    if request.get("zero_valuation_reason"):
+        note = "零成本入库原因（用户确认）：" + request["zero_valuation_reason"]
+        if note not in (doc.get("remarks") or "").splitlines():
+            doc.remarks = (doc.get("remarks") or "") + "\n" + note
     return _validate_native(doc, request)
 
 
@@ -364,7 +383,7 @@ def _build(request, for_update=False):
         for field in ("supplier", "company", "currency"):
             if request.get(field) and request[field] != order.get(field):
                 raise InputError(f"指定 {field} 与采购订单不一致。", [field])
-        selected = _select(rows, request["items"])
+        selected = _select(rows, request["items"], request.get("zero_valuation_reason", ""))
         supplier = _supplier(order.supplier)
         company = _read("Company", order.company)
         # Check sensitive masters before calling the native mapper.
@@ -396,7 +415,7 @@ def _build(request, for_update=False):
             if not factor:
                 raise InputError(f"物料 {item.name} 未配置唯一的 {uom} 库存单位换算。", ["items"])
             doc.append("items", {"item_code": item.name, "qty": _number(chosen["qty"], "实际收货数量"),
-                "received_qty": _number(chosen["qty"], "实际收货数量"), "rate": _number(chosen["rate"], "实际采购单位成本"),
+                "received_qty": _number(chosen["qty"], "实际收货数量"), "rate": _cost(chosen["rate"], request.get("zero_valuation_reason", "")),
                 "uom": uom, "stock_uom": item.stock_uom, "conversion_factor": factor,
                 "warehouse": chosen.get("warehouse") or request.get("warehouse") or DEFAULT_WAREHOUSE})
     doc.check_permission("create")
@@ -404,6 +423,14 @@ def _build(request, for_update=False):
         doc.check_permission("submit")
     doc.posting_date = request["posting_date"]
     doc.ignore_pricing_rule = 1
+    for row in doc.get("items"):
+        # The reason is part of the approved request, never inferred from sale price.
+        row.allow_zero_valuation_rate = int(float(row.rate) == 0 and bool(request.get("zero_valuation_reason")))
+        if row.allow_zero_valuation_rate:
+            row.is_free_item = 1
+            row.price_list_rate = 0
+    if request.get("zero_valuation_reason"):
+        doc.remarks = "零成本入库原因（用户确认）：" + request["zero_valuation_reason"] + ("\n" + doc.remarks if doc.get("remarks") else "")
     if request.get("supplier_reference"):
         doc.supplier_delivery_note = request["supplier_reference"]
     if request.get("supplier_invoice"):
@@ -426,7 +453,8 @@ def _summary(doc, request):
             "物料编号": row.item_code, "物料名称": row.item_name, "贴纸所属客户": customer,
             "合格收货数量": float(row.qty), "采购单位": row.uom, "库存数量": float(row.stock_qty),
             "库存单位": row.stock_uom, "收货仓库": row.warehouse or "", "实际单价": float(row.rate),
-            "净金额": float(row.net_amount), "本位币库存单位估值": float(row.valuation_rate or 0)})
+            "净金额": float(row.net_amount), "本位币库存单位估值": float(row.valuation_rate or 0),
+            "零成本入库": float(row.rate) == 0 and bool(row.get("allow_zero_valuation_rate"))})
     taxes = [{"类型": r.charge_type, "账户": r.account_head, "税率": float(r.rate or 0),
               "金额": float(r.tax_amount or 0), "用途": r.category, "增减": r.add_deduct_tax}
              for r in doc.get("taxes") or []]
@@ -435,13 +463,15 @@ def _summary(doc, request):
                    else ["保存草稿，尚未增加库存或记账。"],
         "fields": {"已有草稿": request.get("existing_document") or "", "供应商": doc.supplier,
             "供应商名称": doc.supplier_name, "公司": doc.company, "币种": doc.currency,
+            "零成本入库原因（用户确认）": request.get("zero_valuation_reason") or "",
             "本位币汇率": float(doc.conversion_rate), "实际收货日期": str(doc.posting_date),
             "供应商送货或参考号": doc.get("supplier_delivery_note") or "", "备注及供应商发票号": doc.get("remarks") or "",
             "税费模板": doc.get("taxes_and_charges") or "", "税费明细": taxes},
         "items": items, "totals": {"净额": float(doc.net_total), "税费": float(doc.total_taxes_and_charges or 0),
             "总额": float(doc.grand_total), "舍入总额": float(doc.rounded_total or 0),
             "禁用舍入": bool(doc.disable_rounded_total), "本位币净额": float(doc.base_net_total)},
-        "warnings": ["供应商发票号仅记入收货备注，不会创建采购发票。"] if request.get("supplier_invoice") else []}
+        "warnings": (["供应商发票号仅记入收货备注，不会创建采购发票。"] if request.get("supplier_invoice") else []) +
+                    (["零成本明细只增加库存数量，不重复计入已记账的服务成本；请核对原因。"] if request.get("zero_valuation_reason") else [])}
 
 
 def get_purchase_receipt_options(purchase_order: str = "", supplier: str = "",
@@ -500,9 +530,11 @@ def preview_purchase_receipt(request: dict):
     """预检 request，不保存。新单 items 每行 qty 加 purchase_order_item（采购来源）或 item_code/rate（直接收货）。
 
     可选 purchase_order、supplier、company、currency、customer、posting_date、warehouse、supplier_reference、supplier_invoice。
-    直接收货 rate 必须为真实正数单位成本；采购来源可沿用原采购单价。仓库默认大坪仓库 - LEYA，日期默认今天。
+    rate 为本次实际入库单位成本；采购来源可沿用原单价。用户明确成本已另行入账或免费取得时，可传rate=0，
+    同时提供zero_valuation_reason说明真实原因，沿用用户已给出的原因不重复询问；不能把未知成本当0。
+    零成本使用原生允许零估值并随整单审核，原因保存到备注。仓库默认大坪仓库 - LEYA，日期默认今天。
     默认 submit=false；仅用户明确本批实际到货并要求提交时同时传 submit=true、actual_receipt=true。
-    已有草稿仅传 existing_document 和上述布尔项，完整审核当前原单；不接受覆盖字段。
+    已有草稿仅传 existing_document、上述布尔项和可选zero_valuation_reason，完整审核当前原单；不覆盖数量金额。
     返回 preview_token 后调用 save_purchase_receipt，使用系统整单审核卡片批准一次。
     """
     try:
@@ -520,18 +552,24 @@ def _verify(doc, request):
     import erpnext
     from frappe.utils import flt
     stock_rows = [row for row in doc.items if frappe.get_cached_value("Item", row.item_code, "is_stock_item")]
+    zero_value_only = True
     for row in stock_rows:
+        zero = float(row.rate) == 0 and bool(row.get("allow_zero_valuation_rate")) and bool(request.get("zero_valuation_reason"))
+        zero_value_only = zero_value_only and zero
         entries = frappe.get_all("Stock Ledger Entry", filters={"voucher_type": "Purchase Receipt", "voucher_no": doc.name,
             "voucher_detail_no": row.name, "is_cancelled": 0}, fields=["company", "item_code", "warehouse", "actual_qty", "stock_value_difference"])
+        value = sum(flt(e.stock_value_difference) for e in entries)
         if (not entries or any(e.company != doc.company or e.item_code != row.item_code or e.warehouse != row.warehouse or flt(e.actual_qty) <= 0 for e in entries)
                 or abs(sum(flt(e.actual_qty) for e in entries) - flt(row.stock_qty)) > 0.000001
                 or any(not math.isfinite(flt(e.stock_value_difference)) for e in entries)
-                or sum(flt(e.stock_value_difference) for e in entries) <= 0):
-            raise InputError("提交后的真实入库流水与数量、仓库或正成本不一致，本次入库须撤回。")
+                or (abs(value) > 0.000001 if zero else value <= 0)):
+            raise InputError("提交后的真实入库流水与数量、仓库或已审核成本不一致，本次入库须撤回。")
     if stock_rows and erpnext.is_perpetual_inventory_enabled(doc.company):
         entries = frappe.get_all("GL Entry", filters={"voucher_type": "Purchase Receipt", "voucher_no": doc.name,
             "is_cancelled": 0}, fields=["company", "debit", "credit"])
-        if (not entries or any(e.company != doc.company for e in entries)
+        needs_gl = not zero_value_only or flt(doc.grand_total) != 0 or any(flt(t.tax_amount) for t in doc.get("taxes") or [])
+        if ((needs_gl and not entries) or any(e.company != doc.company for e in entries)
+                or (not needs_gl and any(flt(e.debit) != 0 or flt(e.credit) != 0 for e in entries))
                 or abs(sum(flt(e.debit) - flt(e.credit) for e in entries)) > 0.01):
             raise InputError("入库会计流水缺失、公司错误或借贷不平，本次入库须撤回。")
 
@@ -548,4 +586,4 @@ TOOLS = [
     ("preview_purchase_receipt", "预检实际采购收货", False, "核对实际供应商、采购行、数量、真实成本和仓库；返回整单审核方案。"),
     ("save_purchase_receipt", "保存或提交实际采购收货", True, "整单批准一次后保存草稿；明确实际到货且要求提交时按原生流程入库记账。"),
 ]
-HINT = "采购收货：先查询精确来源或物料，再集中补齐实际数量和成本。只在明确实际到货并要求提交时使用 submit=true 与 actual_receipt=true。默认草稿；客户贴纸须属于实际客户、维护库存且具有真实正成本。保存工具整单批准一次，禁止另造确认开关或自动选择全部剩余数量。"
+HINT = "采购收货：先查询精确来源或物料，再集中补齐实际数量和成本。只在明确实际到货并要求提交时使用 submit=true 与 actual_receipt=true。默认草稿；客户贴纸须属于实际客户且维护库存。用户明确服务成本已另行入账或免费取得时可rate=0并提供zero_valuation_reason，随整单审核；不能把未知成本当0。保存工具整单批准一次，禁止另造确认开关或自动选择全部剩余数量。"

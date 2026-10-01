@@ -13,6 +13,8 @@ HINT = (HINT_MARKER + '先客户档案、客户贴纸物料、销售订单及收
     '采购先用preview_purchase_order→save_purchase_order创建采购订单；到货再用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt；开票用get_sales_invoice_options→preview_sales_invoice→save_sales_invoice。'
     '缺项集中询问一次，沿用本轮已知资料，不重复要求账号；默认仓库大坪仓库 - LEYA并在审核卡列出。'
     '采购必须真实供应商、数量和采购价，成本不从售价或客户定制费猜测；只有用户明确实际已到货并要求提交才用actual_receipt=true、submit=true。'
+    '用户明确贴纸服务成本已另行入账、本次须零成本入库，或明确免费取得时，采购收货可传rate=0及zero_valuation_reason，原因沿用用户说明，不重复追问，不把未知成本当0。'
+    '零成本只增加实际库存数量，不重复计入已记账服务成本；在原生整单审核卡醒目展示原因和数量，无需另一次确认。'
     '销售开票沿用原单价格、税费和预收抵扣，已有草稿也占用待开票数量；不再扣库存或登记第二次收款。'
     '新单默认草稿；用户明确要求提交时一次审核就保存并提交，无需先批准草稿再重复批准提交。已有草稿用existing_document复核原单，不另建。'
     '未获批准不执行保存；预检成功后直接调用对应save工具显示系统整单审核卡，不先要求文字确认再点批准。'

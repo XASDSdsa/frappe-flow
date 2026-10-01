@@ -27,7 +27,7 @@ class Row(dict):
 def rules():
     """Load pure business functions, without pretending to run native controllers."""
     tree = ast.parse(SOURCE.read_text())
-    functions = {"_number", "_text", "_request", "_available_rows", "_select", "_read", "_order_state"}
+    functions = {"_number", "_cost", "_text", "_request", "_available_rows", "_select", "_read", "_order_state", "_verify"}
     constants = {"REQUEST_FIELDS", "EXISTING_FIELDS", "DEFAULT_WAREHOUSE"}
     nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in functions or
              isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in constants for t in n.targets)]
@@ -156,9 +156,55 @@ def test_duplicate_source_rows_and_direct_items_are_rejected(rules):
 
 def test_zero_source_price_requires_explicit_actual_cost(rules):
     rows = rules._available_rows(Row(items=[source(rate=0)]), [])
-    with pytest.raises(InputError, match="零估值"):
+    with pytest.raises(InputError, match="零成本"):
         rules._select(rows, [{"purchase_order_item": "POI-1", "qty": 100}])
     assert rules._select(rows, [{"purchase_order_item": "POI-1", "qty": 100, "rate": 0.6}])[0]["rate"] == 0.6
+
+
+def test_explicit_zero_cost_reason_allows_direct_and_purchase_order_receipts(rules):
+    reason = "贴纸服务成本已另行入账，本次仅入库数量"
+    request = direct_request(items=[{"item_code": "STICKER-C1", "qty": 1000, "rate": 0}],
+                             zero_valuation_reason=reason, submit=True, actual_receipt=True)
+    assert rules._request(request)["items"][0]["rate"] == 0
+    rows = rules._available_rows(Row(items=[source(rate=0)]), [])
+    assert rules._select(rows, [{"purchase_order_item": "POI-1", "qty": 100}], reason)[0]["rate"] == 0
+    for invalid in (None, "", "   ", True):
+        with pytest.raises(InputError):
+            rules._request({**request, "zero_valuation_reason": invalid})
+    request["items"][0]["qty"] = 0
+    with pytest.raises(InputError):
+        rules._request(request)
+
+
+@pytest.mark.parametrize("rate,value,gl,reason,allowed", [
+    (0, 0, [], "服务成本已另行入账", True),
+    (0, 10, [], "服务成本已另行入账", False),
+    (0, 0, [], "", False),
+    (0, 0, [Row(company="C", debit=600, credit=0), Row(company="C", debit=0, credit=600)], "服务成本已另行入账", False),
+    (0.6, 600, [], "", False),
+    (0.6, 600, [Row(company="C", debit=600, credit=0), Row(company="C", debit=0, credit=600)], "", True),
+])
+def test_posting_verification_accepts_zero_value_without_gl_but_checks_normal_cost(rules, monkeypatch, rate, value, gl, reason, allowed):
+    import sys
+    import types
+    erpnext = types.ModuleType("erpnext")
+    erpnext.is_perpetual_inventory_enabled = lambda _company: True
+    utils = types.ModuleType("frappe.utils")
+    utils.flt = lambda value: float(value or 0)
+    monkeypatch.setitem(sys.modules, "erpnext", erpnext)
+    monkeypatch.setitem(sys.modules, "frappe.utils", utils)
+    row = Row(name="ROW", item_code="STICKER", warehouse="WH", stock_qty=1000,
+              rate=rate, allow_zero_valuation_rate=int(rate == 0))
+    doc = SimpleNamespace(name="PR", company="C", grand_total=rate*1000, items=[row], get=lambda key: [])
+    rules.frappe.get_cached_value = lambda *_args: True
+    rules.frappe.get_all = lambda dt, **_args: ([Row(company="C", item_code="STICKER", warehouse="WH",
+                                                   actual_qty=1000, stock_value_difference=value)] if dt == "Stock Ledger Entry" else gl)
+    request = {"submit": True, "zero_valuation_reason": reason}
+    if allowed:
+        rules._verify(doc, request)
+    else:
+        with pytest.raises(InputError):
+            rules._verify(doc, request)
 
 
 def test_corrupt_draft_source_fails_closed(rules):
