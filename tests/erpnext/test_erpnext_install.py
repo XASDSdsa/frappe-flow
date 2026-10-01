@@ -41,7 +41,6 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 		"flow.integrations.erpnext.sticker_install": {"install_sticker_tool": fake("sticker")},
 		"flow.integrations.erpnext.sales_order_install": {
 			"install_sales_order_tools": fake("sales_order"),
-			"install_sales_order_query_tool": fake("sales_order_query"),
 		},
 		"flow.integrations.erpnext.delivery_note_install": {"install_delivery_note_tools": fake("delivery_note")},
 		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": fake("document_submission")},
@@ -61,7 +60,7 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 
 	assert result["status"] == "installed"
 	assert [name for name, _ in called] == [
-		"customer", "sticker", "sales_order", "sales_order_query", "delivery_note",
+		"customer", "sticker", "sales_order", "delivery_note",
 		"document_submission", "finance", "inventory", "sf_label", "waybill", "paypal",
 	]
 	assert all(enabled for _, enabled in called)
@@ -74,7 +73,6 @@ def test_provider_workflows_are_skipped_without_shipping_app(monkeypatch):
 		"flow.integrations.erpnext.sticker_install": {"install_sticker_tool": lambda **_: {}},
 		"flow.integrations.erpnext.sales_order_install": {
 			"install_sales_order_tools": lambda **_: {},
-			"install_sales_order_query_tool": lambda **_: {},
 		},
 		"flow.integrations.erpnext.delivery_note_install": {"install_delivery_note_tools": lambda **_: {}},
 		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": lambda **_: {}},

@@ -33,14 +33,13 @@ def ensure_workflow_tools(enable: bool = True):
 	from .document_submission_install import install_document_submission_tools
 	from .finance_flow_install import install_finance_tools
 	from .inventory_install import install_inventory_tools
-	from .sales_order_install import install_sales_order_query_tool, install_sales_order_tools
+	from .sales_order_install import install_sales_order_tools
 	from .sticker_install import install_sticker_tool
 
 	result = {
 		"customer": install_customer_tools(enable=enable, configure_prerequisites=False),
 		"sticker": install_sticker_tool(enable=enable),
 		"sales_order": install_sales_order_tools(enable=enable),
-		"sales_order_query": install_sales_order_query_tool(enable=enable),
 		"delivery_note": install_delivery_note_tools(enable=enable),
 		"document_submission": install_document_submission_tools(enable=enable),
 		"finance": install_finance_tools(enable=enable),
