@@ -38,6 +38,11 @@ MANAGED_TOOL_SLUGS = {
 	"get_purchase_receipt_options",
 	"preview_purchase_receipt",
 	"save_purchase_receipt",
+	"get_inventory_options",
+	"get_item_options",
+	"get_supplier_options",
+	"preview_purchase_order",
+	"save_purchase_order",
 	"get_sales_invoice_options",
 	"preview_sales_invoice",
 	"save_sales_invoice",
@@ -74,6 +79,8 @@ TOOL_MODULES = {
 	"sales_order_flow": {"query_sales_order_details", "preview_sales_order", "create_sales_order_draft"},
 	"delivery_note_flow": {"get_delivery_note_options", "preview_delivery_note", "create_delivery_note_draft"},
 	"purchase_receipt_flow": {"get_purchase_receipt_options", "preview_purchase_receipt", "save_purchase_receipt"},
+	"inventory_flow": {"get_inventory_options", "get_item_options", "get_supplier_options"},
+	"purchase_order_flow": {"preview_purchase_order", "save_purchase_order"},
 	"sales_invoice_flow": {"get_sales_invoice_options", "preview_sales_invoice", "save_sales_invoice"},
 	"paypal_receipt": {"paypal_receipt_procedure"},
 	"sf_label_flow": SHIPPING_TOOL_SLUGS - {"preview_sf_waybill_replacement", "create_sf_waybill_replacement", "record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement"},
@@ -82,6 +89,7 @@ TOOL_MODULES = {
 WRITE_TOOL_SLUGS = {
 	"create_or_reuse_customer_profile", "create_customer_sticker_variant", "create_sales_order_draft",
 	"create_delivery_note_draft", "save_purchase_receipt", "save_sales_invoice", "paypal_receipt_procedure",
+	"save_purchase_order",
 	"create_sf_label", "dispatch_sf_label", "create_sf_waybill_replacement",
 	"record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement",
 }
