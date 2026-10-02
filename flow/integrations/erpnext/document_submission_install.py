@@ -25,7 +25,7 @@ TOOLS = (
 
 
 def with_document_submission_guidance(instructions):
-	text = re.sub(re.escape(HINT_MARKER) + r"[^\n]*(?:\n|$)", "", instructions or "")
+	text = re.sub(re.escape(HINT_MARKER) + r"[^\r\n]*(?:\r?\n)*", "", instructions or "")
 	return with_reply_style((text.rstrip() + "\n\n" + HINT).lstrip("\n"))
 
 

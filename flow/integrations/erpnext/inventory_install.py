@@ -15,7 +15,9 @@ HINT = (
     "可用（实存减预留）和projected_qty预计量；不得把预计量当作现有库存，也不得直接改Bin或库存流水。"
     "不清楚物料时用get_item_options，不清楚供应商时用get_supplier_options；精确编号优先，重名不能取第一条。"
     "采购收货继续使用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt，"
-    "只有实际到货且有真实正成本才提交入库；草稿不增加库存，采购收货不会自动付款或开票。"
+    "只有实际到货且成本已明确才提交入库；用户明确贴纸服务成本已另行入账或免费取得时，"
+    "沿用该说明传rate=0及zero_valuation_reason，不把未知成本当0、不重复计入服务成本。"
+    "草稿不增加库存，采购收货不会自动付款或开票。"
     "库存查询是只读动作，不要求客服确认；所有采购写入仍由原生采购单据和一次审核负责。"
 )
 

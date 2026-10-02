@@ -34,7 +34,7 @@ def env(monkeypatch):
 	frappe = types.ModuleType("frappe")
 	frappe.PermissionError = PermissionError
 	frappe.local = Doc(site="test.local")
-	frappe.session = Doc(user=state.user)
+	frappe.session = Doc(user=state.user, sid=state.scope)
 	frappe.flags = Doc()
 	frappe.cache = Doc(
 		get_value=lambda key: deepcopy(state.cache.get(key)),
@@ -61,7 +61,6 @@ def env(monkeypatch):
 	monkeypatch.setitem(sys.modules, "flow.lib.tool", flow_tool)
 	sales = types.ModuleType("flow.integrations.erpnext.sales_order_flow")
 	sales._actor = lambda: state.user
-	sales._scope = lambda: state.scope
 	sales._hash = lambda value: __import__("hashlib").sha256(repr(value).encode()).hexdigest()
 	monkeypatch.setitem(sys.modules, "flow.integrations.erpnext.sales_order_flow", sales)
 
@@ -76,7 +75,7 @@ def env(monkeypatch):
 		return doc
 	frappe.get_doc = get_doc
 	state.update(doc=doc, module=None, frappe=frappe)
-	spec = importlib.util.spec_from_file_location("document_submission_under_test", ROOT / "flow/integrations/erpnext/document_submission.py")
+	spec = importlib.util.spec_from_file_location("flow.integrations.erpnext.document_submission", ROOT / "flow/integrations/erpnext/document_submission.py")
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 	state.module = module
@@ -90,7 +89,7 @@ def test_preview_does_not_submit_and_returns_bound_token(env):
 	assert env.doc.docstatus == 0
 	assert len(result["submission_token"]) == 32
 	assert result["submission_token"] != result["summary"]["modified"][:32]
-	assert env.last_get_doc_kwargs == {}
+	assert env.last_get_doc_kwargs == {"for_update": False}
 
 
 def test_submit_requires_current_revision_and_does_not_call_native_submit_on_change(env):
@@ -106,10 +105,12 @@ def test_submit_uses_native_submit_once_and_replay_is_idempotent(env):
 	result = env.module.submit_reviewed_document(preview["submission_token"])
 	assert result["status"] == "submitted" and result["verified"]
 	assert env.doc.docstatus == 1
-	assert env.last_get_doc_kwargs == {"for_update": True}
-	assert env.rollback == {"save_point": result.get("save_point")} if False else True
+	assert "rollback" not in env
 	replay = env.module.submit_reviewed_document(preview["submission_token"])
-	assert replay["status"] == "already_submitted" and replay["verified"]
+	assert replay["status"] == "needs_review"
+	assert env.last_get_doc_kwargs == {"for_update": True}
+	current = env.module.preview_document_submission("Sales Order", "SAL-ORD-1")
+	assert current["status"] == "already_submitted" and current["verified"]
 
 
 def test_submit_failure_returns_reason_and_keeps_draft(env):
@@ -125,7 +126,7 @@ def test_preview_failure_does_not_rollback_callers_transaction(env):
 	env.doc.denied = {"submit"}
 	result = env.module.preview_document_submission("Sales Order", "SAL-ORD-1")
 	assert result["status"] == "error"
-	assert not hasattr(env, "rollback")
+	assert "rollback" not in env
 
 
 @pytest.mark.parametrize("change", ["user", "scope"])
@@ -134,6 +135,8 @@ def test_token_is_bound_to_user_and_session(env, change):
 	env[change] = "other"
 	if change == "user":
 		env.frappe.session.user = "other"
+	else:
+		env.frappe.session.sid = "other"
 	result = env.module.submit_reviewed_document(preview["submission_token"])
 	assert result["status"] == "error"
 	assert env.doc.docstatus == 0

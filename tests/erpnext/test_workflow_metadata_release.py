@@ -169,15 +169,22 @@ def test_all_installed_guidance_is_allowed_but_unrelated_edits_are_rejected(monk
 	)
 	snapshot = module.capture()
 	monkeypatch.setattr(module, "REQUIRED_AGENT_BINDING_SLUGS", set())
-	for transform in (
+	transforms = (
 		customer_install.with_customer_guidance, sticker_install.with_sticker_guidance,
 		sales_order_install.with_sales_order_guidance, delivery_note_install.with_delivery_note_guidance,
 		document_submission_install.with_document_submission_guidance,
 		finance_flow_install.with_finance_guidance, inventory_install.with_inventory_guidance,
 		sf_label_install.with_sf_label_guidance, waybill_flow_install.with_replacement_guidance,
-	):
+	)
+	for transform in transforms:
 		state["Flow Agent"][0]["instructions"] = transform(state["Flow Agent"][0]["instructions"])
 	module._validate_preserved_metadata(snapshot)
+	first = state["Flow Agent"][0]["instructions"]
+	for _ in range(3):
+		for transform in transforms:
+			state["Flow Agent"][0]["instructions"] = transform(state["Flow Agent"][0]["instructions"])
+		assert state["Flow Agent"][0]["instructions"] == first
+		module._validate_preserved_metadata(snapshot)
 	state["Flow Agent"][0]["instructions"] += "\nunrelated injected instructions"
 	with pytest.raises(AssertionError, match="flow_agent_guidance_changed_outside_contract"):
 		module._validate_preserved_metadata(snapshot)
