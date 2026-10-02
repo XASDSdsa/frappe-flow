@@ -344,6 +344,7 @@ def _validate_contract(snapshot):
 def _validate_preserved_metadata(snapshot):
 	"""Protect custom tools, agent settings, knowledge bindings and custom guidance."""
 	from flow.integrations.erpnext import customer_install, delivery_note_install, finance_flow_install
+	from flow.integrations.erpnext import document_submission_install, inventory_install
 	from flow.integrations.erpnext import sales_order_install, sf_label_install, sticker_install, waybill_flow_install
 
 	before = {group["doctype"]: group["rows"] for group in snapshot["flow"]}
@@ -399,7 +400,15 @@ def _validate_preserved_metadata(snapshot):
 		if target or "create_customer_sticker_variant" in bound:
 			expected = sticker_install.with_sticker_guidance(expected)
 		if target:
-			for transform in (sales_order_install.with_sales_order_guidance, delivery_note_install.with_delivery_note_guidance, finance_flow_install.with_finance_guidance):
+			# Match ensure_workflow_tools' installation order, including the
+			# reviewed-submission and inventory workflows installed on every site.
+			for transform in (
+				sales_order_install.with_sales_order_guidance,
+				delivery_note_install.with_delivery_note_guidance,
+				document_submission_install.with_document_submission_guidance,
+				finance_flow_install.with_finance_guidance,
+				inventory_install.with_inventory_guidance,
+			):
 				expected = transform(expected)
 			if "erpnext_shipping" in set(frappe.get_installed_apps()):
 				for transform in (sf_label_install.with_sf_label_guidance, waybill_flow_install.with_replacement_guidance):
