@@ -34,13 +34,15 @@ const error = computed(() => (single.value ? toolError(props.parts[0].result) : 
 // Preview results are persisted as tool transcript messages. Keep the trusted
 // first-order review visible in both the live run and reloaded session history.
 const stickerServiceReview = computed(() => {
-	for (const part of props.parts) {
-		if (typeof part.result !== "string") continue;
+	for (let i = props.parts.length - 1; i >= 0; i--) {
+		const part = props.parts[i];
+		if (part.name !== "preview_sales_order") continue;
+		if (typeof part.result !== "string") return null;
 		try {
 			const result = JSON.parse(part.result);
-			if (result?.sticker_service_review?.message) return result.sticker_service_review;
+			return result?.sticker_service_review?.message ? result.sticker_service_review : null;
 		} catch {
-			// Non-JSON tool results are handled by the normal activity renderer.
+			return null;
 		}
 	}
 	return null;

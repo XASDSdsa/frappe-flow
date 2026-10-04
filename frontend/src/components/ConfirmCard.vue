@@ -31,7 +31,9 @@ const displayArgs = computed(() => {
 	const { description, ...rest } = parseArgs(props.tool.arguments);
 	return rest;
 });
-const showArgs = computed(() => Boolean(props.tool) && hasArgs(displayArgs.value));
+// A trusted review prompt is the approval content; tool arguments are only the
+// fallback for ordinary confirmations that have no custom prompt.
+const showArgs = computed(() => !body.value && Boolean(props.tool) && hasArgs(displayArgs.value));
 const blockKeys = computed(() => blockKeysFor(props.tool?.name));
 const answered = computed(() => props.question._answer !== undefined);
 
