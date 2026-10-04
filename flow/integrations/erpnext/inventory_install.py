@@ -1,30 +1,34 @@
 """Install read-only inventory, item and supplier selectors owned by Flow."""
 import importlib
 import inspect
-import re
 
 import frappe
 
-from flow.integrations.erpnext.flow_reply_style import with_reply_style
+from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
 
 MODULE = "inventory_flow"
 HINT_MARKER = "库存物料采购查询规则："
 HINT = (
-    HINT_MARKER +
-    "库存先用get_inventory_options读取Bin，分别展示实存actual_qty、预留reserved_qty、"
-    "可用（实存减预留）和projected_qty预计量；不得把预计量当作现有库存，也不得直接改Bin或库存流水。"
-    "不清楚物料时用get_item_options，不清楚供应商时用get_supplier_options；精确编号优先，重名不能取第一条。"
-    "采购收货继续使用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt，"
-    "只有实际到货且成本已明确才提交入库；用户明确贴纸服务成本已另行入账或免费取得时，"
-    "沿用该说明传rate=0及zero_valuation_reason，不把未知成本当0、不重复计入服务成本。"
-    "草稿不增加库存，采购收货不会自动付款或开票。"
-    "库存查询是只读动作，不要求客服确认；所有采购写入仍由原生采购单据和一次审核负责。"
+    HINT_MARKER + (
+    '\n'
+    '\n'
+    '### 只读查询\n'
+    '\n'
+    '- 库存先用get_inventory_options读取Bin，分别展示实存actual_qty、预留reserved_qty、可用（实存减预留）和projected_qty预计量；不得把预计量当作现有库存，也不得直接改Bin或库存流水。\n'
+    '- 不清楚物料时用get_item_options，不清楚供应商时用get_supplier_options；精确编号优先，重名不能取第一条。\n'
+    '\n'
+    '### 采购入库与限制\n'
+    '\n'
+    '- 采购收货继续使用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt，只有实际到货且成本已明确才提交入库；用户明确贴纸服务成本已另行入账或免费取得时，沿用该说明传rate=0及zero_valuation_reason，不把未知成本当0、不重复计入服务成本。\n'
+    '- 草稿不增加库存，采购收货不会自动付款或开票。\n'
+    '- 库存查询是只读动作，不要求客服确认；所有采购写入仍由原生采购单据和一次审核负责。'
+)
 )
 
 
 def with_inventory_guidance(instructions):
-    text = re.sub(re.escape(HINT_MARKER) + r"[^\r\n]*(?:\r?\n)*", "", instructions or "")
-    return with_reply_style((text.rstrip() + "\n\n" + HINT).lstrip("\n"))
+    text = instructions or ""
+    return with_reply_style(with_managed_guidance(text, HINT_MARKER, HINT))
 
 
 def tool_definitions():

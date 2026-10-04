@@ -195,7 +195,21 @@ def _summary(doc, request):
 
 
 def preview_purchase_order(request: dict):
-    """预检采购订单；真实供应商、物料、数量、成本和仓库齐全后返回审核令牌。"""
+    """### 参数与默认值
+
+    - `request` 必填 `supplier`、`items`；每行含 `item_code`、`qty`、`rate`，可选 `warehouse`、`uom`、`schedule_date`。
+    - 可选 `company`、`currency`、`transaction_date`、`schedule_date`、`warehouse`；`transaction_date` 默认今天，`schedule_date` 默认订单日期；仓库默认 `大坪仓库 - LEYA`。
+    - 默认 `submit=false`；仅明确要求提交才传 `true`。已有草稿用 `existing_document` 审核原单，不覆盖字段。
+
+    ### 返回与下一步
+
+    - 返回审核摘要和 `preview_token`，随后调用 `save_purchase_order` 整体批准一次。
+
+    ### 限制
+
+    - 数量与真实采购单位成本必须为正数；不从售价或定制服务费猜成本。
+    - 只读预检，不保存、不增加库存。
+    """
     try:
         return preview(KIND, _request(request), _build, _summary)
     except Exception as exc:
@@ -205,14 +219,26 @@ def preview_purchase_order(request: dict):
 
 @tool(requires_confirmation=True, confirm_prompt=lambda args: confirmation(KIND, args.get("preview_token")))
 def save_purchase_order(preview_token: str):
-    """整体批准后保存或提交原生采购订单；重复执行返回同一张单。"""
+    """### 参数与默认值
+
+    - 使用 `preview_purchase_order` 返回的真实 `preview_token`；保存或提交动作沿用已审核方案。
+
+    ### 返回与下一步
+
+    - 整体批准一次后执行，重复执行返回同一张单；以真实单号和 `verified=true` 核实结果。
+    - 到货后使用采购收货工具办理入库。
+
+    ### 限制
+
+    - 默认草稿；只按明确要求提交，不直接收货、不增加库存、不登记付款。
+    """
     with _without_price_maintenance():
         return execute(KIND, preview_token, _build, _summary)
 
 
 TOOLS = (
     ("preview_purchase_order", "预检采购订单", False,
-     "核对真实供应商、物料、数量、采购成本、仓库和交期；不保存、不增加库存。"),
+     '预检采购订单的真实供应商、物料、数量、成本、仓库和交期。'),
     ("save_purchase_order", "保存或提交采购订单", True,
-     "整体批准一次后保存草稿或按明确要求提交原生采购订单；不直接收货、不登记付款。"),
+     '整体批准后保存或提交原生采购订单。'),
 )

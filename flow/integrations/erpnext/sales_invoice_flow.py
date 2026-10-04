@@ -260,7 +260,18 @@ def _verify(doc, request):
 
 
 def get_sales_invoice_options(source_type: str, source_document: str):
-    """只读返回原销售订单或出库单实际剩余可开票数量，已扣除现有草稿。"""
+    """### 参数与默认值
+
+    - `source_type` 为 `Sales Order` 或 `Delivery Note`；`source_document` 为真实来源单号。
+
+    ### 返回与下一步
+
+    - 返回已扣除现有草稿占用的实际剩余数量；按明确选择或全部剩余要求调用 `preview_sales_invoice`。
+
+    ### 限制
+
+    - 不保存、不提交发票。
+    """
     try:
         source = _source(source_type, source_document)
         return {'status': 'needs_selection', 'reason': '请指定本次行及数量，或明确全部剩余开票。',
@@ -272,10 +283,19 @@ def get_sales_invoice_options(source_type: str, source_document: str):
 
 
 def preview_sales_invoice(request: dict):
-    """预检开票。request 用 source_type(Sales Order/Delivery Note)、source_document、items[{source_row,qty}]或all_rows=true。
+    """### 参数与默认值
 
-    默认保存草稿；用户明确提交才传 submit=true。可选posting_date/due_date。已有草稿仅传existing_document和submit。
-    原单价格、税费、预收款沿用原生规则；不能通过本工具退货、直接扣库存或额外收款。
+    - `request` 使用 `source_type`（`Sales Order/Delivery Note`）、`source_document` 和 `items[{source_row,qty}]`；明确全部剩余时可传 `all_rows=true`。
+    - 默认 `submit=false`，明确要求提交才传 `true`；可选 `posting_date`、`due_date`。
+    - 已有草稿仅传 `existing_document` 和 `submit`，复核原单。
+
+    ### 返回与下一步
+
+    - 核对原单价格、税费、预收抵扣与保存或提交动作，返回 `preview_token`，随后调用 `save_sales_invoice` 整单批准一次。
+
+    ### 限制
+
+    - 不通过本工具退货、直接扣库存或额外收款。
     """
     try:
         r = _request(request)
@@ -290,13 +310,25 @@ def preview_sales_invoice(request: dict):
 
 @tool(requires_confirmation=True, confirm_prompt=lambda args: confirmation(KIND, args.get('preview_token')))
 def save_sales_invoice(preview_token: str):
-    """整体批准后保存或提交所审核销售发票；失败撤回本次写入，重复批准返回原单。"""
+    """### 参数与默认值
+
+    - 使用 `preview_sales_invoice` 返回的真实 `preview_token`；动作沿用已审核方案。
+
+    ### 返回与下一步
+
+    - 整单批准一次后执行；失败撤回本次写入，重复批准返回原单。
+    - 以 `verified=true` 和真实单号核实保存或提交结果。
+
+    ### 限制
+
+    - 不重复扣库存、不登记第二次收款。
+    """
     return execute(KIND, preview_token, _build, _summary, verify=_verify)
 
 
 TOOLS = [
-    ('get_sales_invoice_options', '查询待开票明细', False, '读取已提交订单或出库单的剩余可开票数量，扣除草稿占用。'),
-    ('preview_sales_invoice', '预检销售开票', False, '原生转换，核对价格、税费、预收抵扣与保存或提交动作，返回审核方案。'),
-    ('save_sales_invoice', '保存或提交销售发票', True, '整单批准后执行原生开票；不重复扣库存或登记新收款。'),
+    ('get_sales_invoice_options', '查询待开票明细', False, '只读查询已提交销售订单或出库单的剩余可开票明细。'),
+    ('preview_sales_invoice', '预检销售开票', False, '按原生规则预检销售开票并生成审核方案。'),
+    ('save_sales_invoice', '保存或提交销售发票', True, '整体批准后保存或提交已审核的原生销售发票。'),
 ]
 HINT = '销售开票先查询剩余明细，使用已知明确选择或全部剩余要求；原生价格税费与预收抵扣完整展示。默认草稿，明确要求提交才submit=true。已收款不等于已开票，开票不等于再收款；不重复扣库存。不支持的退货、合并或特殊业务说明原因并提供原生入口。'

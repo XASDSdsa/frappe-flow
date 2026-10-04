@@ -80,16 +80,16 @@ class SalesOrderGuidanceTests(unittest.TestCase):
         module, *_ = load_install()
         self.assertIn("先确定客户档案，再建立需要的客户贴纸物料，最后创建销售订单", module.HINT)
         self.assertIn("含仅贴纸订单", module.HINT)
-        self.assertIn("销售单价统一为0元", module.HINT)
+        self.assertIn("销售单价统一为 **0 元**", module.HINT)
         self.assertIn("不要求固定话术", module.HINT)
         self.assertIn("bundle_mappings", module.HINT)
         self.assertIn("standalone=true", module.HINT)
         self.assertIn("没有提到贴纸的商品不添加贴纸、不创建组合", module.HINT)
         self.assertIn("失败写入统一回滚", module.HINT)
         self.assertIn("不增加额外确认", module.HINT)
-        self.assertIn("免费也保留0元服务行", module.HINT)
+        self.assertIn("免费也保留 0 元服务行", module.HINT)
         self.assertIn("customization_services", module.HINT)
-        self.assertIn("只复用客户已有贴纸不代表再次定制", module.HINT)
+        self.assertIn("只复用已有贴纸不代表再次定制", module.HINT)
         self.assertNotIn("只有客户明确同意收费时才另列", module.HINT)
 
     def test_replaces_old_multiline_block_and_preserves_surrounding_rules(self):
@@ -109,7 +109,7 @@ class SalesOrderGuidanceTests(unittest.TestCase):
         self.assertNotIn(module.LEGACY_HINT_MARKER, result)
         self.assertNotIn("旧规则", result)
         self.assertEqual(result.count(module.HINT_MARKER), 1)
-        self.assertEqual(next(line for line in result.splitlines() if line.startswith(module.HINT_MARKER)), module.HINT)
+        self.assertIn("## " + module.HINT + "\n\n<!-- /flow-guidance -->", result)
 
     def test_refresh_is_idempotent_and_replaces_stale_managed_rules(self):
         module, *_ = load_install()

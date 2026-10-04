@@ -58,7 +58,20 @@ def _page(rows, start, *, reason):
 
 def get_inventory_options(item_code: str = "", warehouse: str = "", item_query: str = "",
                           start: int = 0, include_zero: bool = False):
-    """按精确物料/仓库列出 Bin 库存；actual、reserved、projected 分开返回。"""
+    """### 参数与默认值
+
+    - 使用准确 `item_code` 或 `item_query` 筛选物料，两者互斥；`warehouse` 可选。
+    - `start=0`；`include_zero=false`，需要零实存记录时传 `true`。
+
+    ### 返回与下一步
+
+    - 分别展示 `actual_qty` 实存、`reserved_qty` 预留、`available_qty`（实存减预留）和 `projected_qty` 预计量，以及估值和库存单位。
+    - 结果分页，按 `has_more` 和 `next_start` 读取后续记录。
+
+    ### 限制
+
+    - 不把预计量当现有库存，不修改 Bin 或库存流水，不要求批准。
+    """
     try:
         start = _start(start)
         if type(include_zero) is not bool:
@@ -117,7 +130,19 @@ def get_inventory_options(item_code: str = "", warehouse: str = "", item_query: 
 
 def get_item_options(item_code: str = "", query: str = "", stock_only: bool = False,
                      purchase_only: bool = False, start: int = 0):
-    """列出启用物料及库存/采购属性；精确编号优先，结果分页且不默认取第一条。"""
+    """### 参数与默认值
+
+    - 精确 `item_code` 优先，也可用 `query` 筛选名称，两者互斥。
+    - `stock_only=false`、`purchase_only=false`、`start=0`。
+
+    ### 返回与下一步
+
+    - 返回准确物料编号和属性；按 `has_more`、`next_start` 分页，使用返回编号继续采购或查询库存。
+
+    ### 限制
+
+    - 不自动选择同名物料或第一条候选。
+    """
     try:
         start = _start(start)
         if type(stock_only) is not bool or type(purchase_only) is not bool:
@@ -152,7 +177,18 @@ def get_item_options(item_code: str = "", query: str = "", stock_only: bool = Fa
 
 
 def get_supplier_options(supplier: str = "", query: str = "", start: int = 0):
-    """列出启用供应商并做精确查重；不自动选择同名供应商。"""
+    """### 参数与默认值
+
+    - 精确 `supplier` 优先，也可用 `query` 查找，两者互斥；`start=0`。
+
+    ### 返回与下一步
+
+    - 支持精确查重；按 `has_more`、`next_start` 分页，使用准确编号继续采购。
+
+    ### 限制
+
+    - 不自动选择同名供应商或第一条候选。
+    """
     try:
         start = _start(start)
         supplier = _text(supplier, "supplier", optional=True)
@@ -181,9 +217,9 @@ def get_supplier_options(supplier: str = "", query: str = "", start: int = 0):
 
 TOOLS = (
     ("get_inventory_options", "查询库存余额", False,
-     "按精确物料或仓库读取 ERPNext Bin；显示实存、预留、可用、预计、估值和库存单位，不修改库存。"),
+     '只读查询 ERPNext Bin 的库存余额、估值和库存单位。'),
     ("get_item_options", "查询物料档案", False,
-     "查询启用物料及库存/采购属性，支持精确编号、名称筛选和分页，不自动选择同名物料。"),
+     '只读查询启用物料及其库存、采购属性。'),
     ("get_supplier_options", "查询供应商档案", False,
-     "查询启用供应商并返回精确编号，支持查重和分页，不自动选择同名供应商。"),
+     '只读查询启用供应商并返回准确编号。'),
 )

@@ -476,7 +476,19 @@ def _summary(doc, request):
 
 def get_purchase_receipt_options(purchase_order: str = "", supplier: str = "",
                                  item_codes: list[str] | None = None, start: int = 0):
-    """只读列出采购订单待收货数量或直接收货物料；库存与成本仅在实际到货并提交后形成。"""
+    """### 参数与默认值
+
+    - 提供准确 `purchase_order`；未指定时按可选 `supplier` 分页列出采购订单，`start=0`。
+    - 直接收货使用精确 `item_codes` 列表查询物料，可同时传入 `supplier`。
+
+    ### 返回与下一步
+
+    - 返回剩余数量、草稿占用和阻止原因；集中补齐本次实际收货数量和真实成本后调用 `preview_purchase_receipt`。
+
+    ### 限制
+
+    - 不增加库存；实际到货并提交采购收货单后才形成库存与成本，不自动选全部剩余数量。
+    """
     try:
         if type(start) is not int or start < 0:
             raise InputError("start 必须为非负整数。", ["start"])
@@ -527,15 +539,23 @@ def get_purchase_receipt_options(purchase_order: str = "", supplier: str = "",
 
 
 def preview_purchase_receipt(request: dict):
-    """预检 request，不保存。新单 items 每行 qty 加 purchase_order_item（采购来源）或 item_code/rate（直接收货）。
+    """### 参数与默认值
 
-    可选 purchase_order、supplier、company、currency、customer、posting_date、warehouse、supplier_reference、supplier_invoice。
-    rate 为本次实际入库单位成本；采购来源可沿用原单价。用户明确成本已另行入账或免费取得时，可传rate=0，
-    同时提供zero_valuation_reason说明真实原因，沿用用户已给出的原因不重复询问；不能把未知成本当0。
-    零成本使用原生允许零估值并随整单审核，原因保存到备注。仓库默认大坪仓库 - LEYA，日期默认今天。
-    默认 submit=false；仅用户明确本批实际到货并要求提交时同时传 submit=true、actual_receipt=true。
-    已有草稿仅传 existing_document、上述布尔项和可选zero_valuation_reason，完整审核当前原单；不覆盖数量金额。
-    返回 preview_token 后调用 save_purchase_receipt，使用系统整单审核卡片批准一次。
+    - 新单 `request.items` 每行含 `qty`，采购来源用 `purchase_order_item`，直接收货用 `item_code/rate`。
+    - 可选 `purchase_order`、`supplier`、`company`、`currency`、`customer`、`posting_date`、`warehouse`、`supplier_reference`、`supplier_invoice`。
+    - `rate` 为本次实际入库单位成本，采购来源可沿用原单价；仓库默认 `大坪仓库 - LEYA`，日期默认今天。
+    - 默认 `submit=false`；仅用户明确本批实际到货并要求提交时，同时传 `submit=true`、`actual_receipt=true`。
+    - 已有草稿传 `existing_document`、上述布尔项及可选 `zero_valuation_reason`，审核当前原单，不覆盖数量金额。
+
+    ### 返回与下一步
+
+    - 返回 `preview_token` 后调用 `save_purchase_receipt`，使用系统整单审核卡批准一次。
+
+    ### 限制
+
+    - 用户明确服务成本已另行入账或免费取得时，可传 `rate=0` 及真实 `zero_valuation_reason`；沿用已给原因，不重复询问，不把未知成本当 0。
+    - 零成本使用原生允许零估值，原因随整单审核并保存到备注；不重复计入已记账服务成本。
+    - 不保存、不增加库存。
     """
     try:
         request = _request(request)
@@ -576,14 +596,26 @@ def _verify(doc, request):
 
 @tool(requires_confirmation=True, confirm_prompt=lambda args: confirmation(KIND, args.get("preview_token")))
 def save_purchase_receipt(preview_token: str):
-    """整单批准后按预检保存或提交原生采购收货；重试返回本次已有单据，提交才实际入库记账。"""
+    """### 参数与默认值
+
+    - 使用 `preview_purchase_receipt` 返回的真实 `preview_token`；动作沿用已审核方案。
+
+    ### 返回与下一步
+
+    - 默认保存草稿；仅明确实际到货且要求提交时，按原生流程入库记账。
+    - 重复执行返回本次已有单据；以 `verified=true` 和真实单号报告完成。
+
+    ### 限制
+
+    - 草稿不增加库存；采购收货不自动付款或开票。
+    """
     with _without_price_maintenance():
         return execute(KIND, preview_token, _build, _summary, verify=_verify)
 
 
 TOOLS = [
-    ("get_purchase_receipt_options", "查询实际采购收货来源", False, "查询采购订单剩余数量或精确物料，包含草稿占用与阻止原因，不增加库存。"),
-    ("preview_purchase_receipt", "预检实际采购收货", False, "核对实际供应商、采购行、数量、真实成本和仓库；返回整单审核方案。"),
-    ("save_purchase_receipt", "保存或提交实际采购收货", True, "整单批准一次后保存草稿；明确实际到货且要求提交时按原生流程入库记账。"),
+    ("get_purchase_receipt_options", "查询实际采购收货来源", False, '只读查询采购订单待收货数量或直接收货物料。'),
+    ("preview_purchase_receipt", "预检实际采购收货", False, '只读预检实际采购收货，生成整单审核方案。'),
+    ("save_purchase_receipt", "保存或提交实际采购收货", True, '整体批准后保存或提交实际采购收货单。'),
 ]
 HINT = "采购收货：先查询精确来源或物料，再集中补齐实际数量和成本。只在明确实际到货并要求提交时使用 submit=true 与 actual_receipt=true。默认草稿；客户贴纸须属于实际客户且维护库存。用户明确服务成本已另行入账或免费取得时可rate=0并提供zero_valuation_reason，随整单审核；不能把未知成本当0。保存工具整单批准一次，禁止另造确认开关或自动选择全部剩余数量。"

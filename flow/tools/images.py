@@ -19,10 +19,22 @@ def show_image(
 	field: Annotated[str | None, "Image fieldname, default image"] = None,
 	alt: Annotated[str | None, "Short alt text for the markdown image"] = None,
 ) -> dict:
-	"""Show a picture in Flow chat. For a document image, pass doctype, name and field
-	(default image). This resolves that document's own attachment directly. If also
-	passing file, it must match that field. A shared URL alone is ambiguous: use the
-	known document or exact File ID instead of retrying the same URL.
+	"""Show a picture in Flow chat using the exact attachment or document image.
+
+	### Parameters and defaults
+
+	- `file`: an exact File ID, an unambiguous file name, or a local URL.
+	- For a document image, pass `doctype` and `name`; `field` defaults to `image`. This resolves that document's own attachment directly.
+	- `alt`: optional short alt text; defaults to the file name, then `image`.
+
+	### Results and next steps
+
+	- Returns the preview URL, alt text, image Markdown, file name, and exact File ID.
+
+	### Limits
+
+	- If also passing `file` for a document image, it must match that document's image field.
+	- A shared URL alone is ambiguous. Use the known document or exact File ID instead of retrying the same URL.
 	"""
 	doctype, name, field = ((value or "").strip() for value in (doctype, name, field))
 	if doctype or name or field:

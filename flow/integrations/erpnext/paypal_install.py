@@ -7,12 +7,24 @@ TOOL_SLUG = "paypal_receipt_procedure"
 TOOL_IMPORT_PATH = "flow.integrations.erpnext.paypal_receipt.paypal_receipt_procedure"
 TOOL_TITLE = "登记 PayPal 美元收款"
 TOOL_DESCRIPTION = (
-	"登记已在外部确认到账的 PayPal 美元收款，仅处理尚未开票的销售订单预收款。"
-	"输入收款总额 gross、PayPal 手续费 fee、净到账 net（均为 USD）及交易号。"
-	"本工具不调用 PayPal 接口验证到账，不办理提现或结汇。"
-	"dry_run 仅做只读预检；正式登记需要用户确认。"
-	"相同交易号和相同收款内容重复请求返回原凭证，不重复入账；冲突信息会阻止登记。"
-	"已开票订单请使用原生销售发票收款流程。"
+	(
+    '登记外部已确认到账的 PayPal 美元销售订单预收款。\n'
+    '\n'
+    '### 参数与默认值\n'
+    '\n'
+    '- `sales_order` 为尚未开票的销售订单；传真实 `transaction_id`、`posting_date`、`reference_date`。\n'
+    '- `gross` 为收款总额、`fee` 为 PayPal 手续费、`net` 为净到账，均为 USD；`currency=USD`，`customer` 可选。\n'
+    '- `dry_run=false`；传 `true` 只读预检，正式登记须用户确认。\n'
+    '\n'
+    '### 返回与下一步\n'
+    '\n'
+    '- 相同交易号和相同收款内容重复请求返回原凭证；冲突信息阻止登记。\n'
+    '- 已开票订单使用原生销售发票收款流程。\n'
+    '\n'
+    '### 限制\n'
+    '\n'
+    '- 本工具不调用 PayPal 接口验证到账，不办理提现或结汇。'
+)
 )
 
 

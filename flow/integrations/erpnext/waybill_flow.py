@@ -186,7 +186,7 @@ def _confirmation(args):
 
 
 def preview_sf_waybill_replacement(shipment: str, form: dict | str, reason: str, shipped: bool | None = None):
-	"""只读预检替换参数，不联系顺丰、不创建本地记录。"""
+	'只读预检顺丰换单场景、旧单号、原因和新参数。'
 	try:
 		_actor()
 		if not isinstance(reason, str) or len("".join(reason.split())) < 4:
@@ -216,7 +216,7 @@ def preview_sf_waybill_replacement(shipment: str, form: dict | str, reason: str,
 
 @tool(requires_confirmation=True, confirm_prompt=_confirmation)
 def create_sf_waybill_replacement(preview_token: str):
-	"""批准并创建替换面单；旧单号保留，未发货自动启用、已发货等待外部确认。"""
+	'整体批准后创建替换面单，并保留旧单号与历史。'
 	ledger = None
 	try:
 		# Check the durable ledger before loading the expiring preview cache. A
@@ -273,7 +273,7 @@ def create_sf_waybill_replacement(preview_token: str):
 
 @tool(requires_confirmation=True)
 def record_sf_waybill_replacement_feedback(shipment: str, waybill_record: str, status: str, note: str):
-	"""批准记录顺丰外部客服反馈，不直接切换当前面单。"""
+	'批准记录顺丰外部客服的换单反馈。'
 	try:
 		if not str(note or "").strip():
 			frappe.throw("请填写顺丰外部客服反馈内容。")
@@ -285,7 +285,7 @@ def record_sf_waybill_replacement_feedback(shipment: str, waybill_record: str, s
 
 @tool(requires_confirmation=True)
 def activate_sf_waybill_replacement(shipment: str, waybill_record: str, reason: str):
-	"""批准启用已获顺丰外部确认的替换面单，并保留旧单历史。"""
+	'批准启用已获顺丰外部确认的替换面单。'
 	try:
 		result = waybill.activate_replacement(shipment, waybill_record, reason)
 		return {"verified": bool(result.get("ok")), **result,
@@ -295,8 +295,66 @@ def activate_sf_waybill_replacement(shipment: str, waybill_record: str, reason: 
 
 
 TOOLS = (
-	("preview_sf_waybill_replacement", "预检顺丰替换面单", False, "核对未发货或已发货换单场景、旧单号、原因和新参数；不联系顺丰、不创建记录。"),
-	("create_sf_waybill_replacement", "批准并创建替换面单", True, "整体批准后创建新顺丰面单；未发货自动启用，已发货保留待替换并等待顺丰外部确认。"),
-	("record_sf_waybill_replacement_feedback", "记录顺丰客服换单反馈", True, "批准记录外部顺丰客服反馈；不直接切换当前面单。"),
-	("activate_sf_waybill_replacement", "批准启用替换面单", True, "仅已获顺丰客服确认的替换面单可启用，旧单号和历史保留。"),
+	("preview_sf_waybill_replacement", "预检顺丰替换面单", False, (
+        '只读预检顺丰换单场景、旧单号、原因和新参数。\n'
+        '\n'
+        '### 参数与默认值\n'
+        '\n'
+        '- `shipment` 为原运单；`form` 为新寄件、收件和货物参数；`reason` 为具体换单原因。\n'
+        '- `shipped` 默认由当前物流状态核对；明确传值必须与实际状态一致。\n'
+        '\n'
+        '### 返回与下一步\n'
+        '\n'
+        '- 返回审核摘要和真实 `preview_token`，随后调用 `create_sf_waybill_replacement` 整体批准一次。\n'
+        '\n'
+        '### 限制\n'
+        '\n'
+        '- 不联系顺丰、不创建本地记录。未发货原面单须有明确取消凭证。'
+    )),
+	("create_sf_waybill_replacement", "批准并创建替换面单", True, (
+        '整体批准后创建替换面单，并保留旧单号与历史。\n'
+        '\n'
+        '### 参数与默认值\n'
+        '\n'
+        '- 使用预检返回的真实 `preview_token`。\n'
+        '\n'
+        '### 返回与下一步\n'
+        '\n'
+        '- 未发货创建成功后自动启用新单，但不等于已发货。\n'
+        '- 已发货创建成功后保持待替换，先记录顺丰外部客服反馈，再批准启用。\n'
+        '\n'
+        '### 限制\n'
+        '\n'
+        '- 失败、处理中或待核实均保留原记录；不重复下单或擅自切换当前单号。'
+    )),
+	("record_sf_waybill_replacement_feedback", "记录顺丰客服换单反馈", True, (
+        '批准记录顺丰外部客服的换单反馈。\n'
+        '\n'
+        '### 参数与默认值\n'
+        '\n'
+        '- 传入真实 `shipment`、`waybill_record`、反馈 `status` 和外部客服反馈内容 `note`。\n'
+        '\n'
+        '### 返回与下一步\n'
+        '\n'
+        '- 仅确认成功、进入待启用状态后，才可调用 `activate_sf_waybill_replacement`。\n'
+        '\n'
+        '### 限制\n'
+        '\n'
+        '- 不直接切换当前面单；本系统客服或自由文本不能代替顺丰外部确认。'
+    )),
+	("activate_sf_waybill_replacement", "批准启用替换面单", True, (
+        '批准启用已获顺丰外部确认的替换面单。\n'
+        '\n'
+        '### 参数与默认值\n'
+        '\n'
+        '- 传入真实 `shipment`、`waybill_record` 和启用原因 `reason`。\n'
+        '\n'
+        '### 返回与下一步\n'
+        '\n'
+        '- 以实际返回结果确认新面单是否启用；旧单号与运费历史保留。\n'
+        '\n'
+        '### 限制\n'
+        '\n'
+        '- 仅已获顺丰外部客服确认的替换面单可启用。'
+    )),
 )
