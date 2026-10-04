@@ -7,7 +7,9 @@
 		frame = 0;
 		// Leave native pinch zoom alone; a zoomed viewport is not a keyboard resize.
 		if (viewport && Math.abs(viewport.scale - 1) > 0.01) return;
-		const height = viewport ? Math.min(viewport.height, window.innerHeight) : window.innerHeight;
+		// Keep top and height in the same visual viewport. Capping it to the
+		// layout height can leave an uncovered strip when browser chrome changes.
+		const height = viewport ? viewport.height : window.innerHeight;
 		if (!Number.isFinite(height) || height <= 0) return;
 		const top = viewport ? Math.max(0, viewport.offsetTop) : 0;
 		const style = document.documentElement.style;
