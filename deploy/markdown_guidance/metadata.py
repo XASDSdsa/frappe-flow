@@ -216,8 +216,10 @@ def main():
 			_save_private(plan_path, plan)
 		plan = json.loads(plan_path.read_text())
 		if args.mode in {"migrate", "fail-after-owner"}:
+			before = _library()._digest(_library()._capture_flow())
 			result = migrate(snapshot, plan, inject_failure=args.mode == "fail-after-owner")
-			print(json.dumps({"result": "MIGRATION_OK", **result}))
+			after = _library()._digest(_library()._capture_flow())
+			print(json.dumps({"result": "MIGRATION_OK", "before": before, "after": after, "actions": result}))
 		elif args.mode == "validate":
 			print(json.dumps(validate(snapshot, plan)))
 		else:
