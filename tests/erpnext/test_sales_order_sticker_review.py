@@ -56,8 +56,8 @@ def resolved_rows():
              "sticker_model": "Green", "sticker_version": "v1"}]
 
 
-@pytest.mark.parametrize("row_type, expected", [("product", "尚未选择贴纸"), ("bundle", "已选择贴纸"),
-                                               ("standalone_sticker", "已选择贴纸")])
+@pytest.mark.parametrize("row_type, expected", [("product", "本单未列贴纸"), ("bundle", "本单已选择贴纸"),
+                                               ("standalone_sticker", "本单已选择贴纸")])
 def test_first_order_sticker_choice_appears_in_overall_approval(flow, row_type, expected):
     module, harness = flow
     harness.frappe.get_list = Mock(return_value=[])
@@ -65,13 +65,15 @@ def test_first_order_sticker_choice_appears_in_overall_approval(flow, row_type, 
                               {"items": [{"item_code": "GREEN", "row_type": row_type}]})
     fingerprint = module._hash(summary)
     review = module._first_order_sticker_review(summary)
+    assert review["display_mode"] == "review_notice"
+    assert review["requires_input"] is False
     harness.frappe.get_list.assert_called_once_with(
         "Sales Order", filters={"customer": "CUSTOMER", "docstatus": ["!=", 2]},
         fields=["name"], limit_page_length=1)
     module._load_plan = lambda _token: {"summary": summary, "sticker_service_review": review}
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
-    assert "⚠️ **首单贴纸服务选择**" in card
-    assert expected in card and "不额外确认" in card
+    assert "⚠️ **首单贴纸提醒**" in card
+    assert expected in card and "不增加第二次确认" in card
     assert module._hash(summary) == fingerprint
 
 

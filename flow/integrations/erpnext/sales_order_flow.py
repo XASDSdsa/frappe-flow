@@ -479,10 +479,11 @@ def _first_order_sticker_review(summary):
             return None
         basis = "当前账号未查到该客户未取消的历史订单，按首单提醒。"
     selected = any(row["row_type"] in {"bundle", "sticker", "standalone_sticker"} for row in summary["items"])
-    choice = ("已选择贴纸：请核对对应商品、贴纸型号／版本和数量。" if selected else
-              "尚未选择贴纸：请核对本单需要客户贴纸还是不需要；需要时补齐贴纸物料并重新预检。")
-    return {"title": "首单贴纸服务选择", "message": basis + "\n" + choice +
-            "\n贴纸单价为0元；定制服务费仅按已约定金额另列。随整单审核，不额外确认、不自动添加物料或收费。"}
+    choice = ("本单已选择贴纸：请核对对应商品、贴纸型号／版本和数量。" if selected else
+              "本单未列贴纸：请在整单审核时确认是否需要客户贴纸。")
+    return {"title": "首单贴纸提醒", "display_mode": "review_notice", "requires_input": False,
+            "message": basis + "\n" + choice +
+            "\n贴纸售价固定为0元；定制服务费只有明确约定收费时才单独列出。此提醒随整单审核，不增加第二次确认，不自动添加贴纸、组合产品或收费项目。"}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):
