@@ -23,7 +23,7 @@ from .sales_order_resolution import STANDALONE_STICKER_WARNING, resolve_order_in
 
 SERVICE = "Flow Sales Order"
 TTL = 1800
-VERSION = 3
+VERSION = 4
 DEFAULT_WAREHOUSE = "大坪仓库 - LEYA"
 STAGES = (
     ("inputs", "客户、商品与本人销售员", "核对客户、商品数量、贴纸归属和当前登录客服的销售员关联"),
@@ -506,7 +506,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
 
     用户要求配客户贴纸时 include_stickers=true；按实际物理件数一件一张。
     多版本通过 sticker_mappings 指明 product_row（一开始）和贴纸编码或型号版本。
-    所有贴纸销售价为0。巧克粉和贴纸同在 items 时自动检查搭配；AI可用
+    所有贴纸销售价为0；已由贴纸投入承担的免费定制服务可用非库存服务物料并明确传 is_free_item=true、rate=0，普通库存商品仍必须有正数售价。巧克粉和贴纸同在 items 时自动检查搭配；AI可用
     bundle_mappings=[{product_row:1,sticker_row:2}]明确同单搭配，均为原items行号。
     独立/备用贴纸行传standalone=true。组合需一颗巧克粉一张贴纸，歧义集中询问。
     没提到贴纸不自动添加。预检不保留物料或单据写入，批准一次后创建/复用原生产品组合。

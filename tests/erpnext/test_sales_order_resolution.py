@@ -427,6 +427,20 @@ def test_explicit_product_price_must_be_positive_and_finite(h, rate):
 	assert result["items"] == []
 
 
+def test_explicitly_free_nonstock_service_can_be_zero_priced(h):
+	h.item("CUSTOM-SERVICE", item_name="贴纸制作模版收费500", is_stock_item=0)
+	result = h.call(items=[{"item_code": "CUSTOM-SERVICE", "qty": 1, "rate": 0, "is_free_item": True}])
+	assert result["status"] == "ready"
+	assert result["items"][0]["rate"] == 0
+	assert result["items"][0]["is_free_item"] == 1
+
+
+def test_zero_priced_stock_item_cannot_be_marked_as_free_service(h):
+	result = h.call(items=[{"item_code": "GREEN", "qty": 1, "rate": 0, "is_free_item": True}])
+	assert "free_stock_item_not_allowed" in codes(result)
+	assert result["items"] == []
+
+
 @pytest.mark.parametrize("color", list("绿灰蓝粉"))
 def test_documented_shorthand_resolves_only_exact_neutral_full_name(h, color):
 	h.item("SHORT", item_name=f"山东中性{color}方", attributes=[])

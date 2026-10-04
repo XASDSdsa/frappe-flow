@@ -16,8 +16,8 @@ from frappe.utils import nowdate
 
 STICKER_TEMPLATE = "巧克粉贴纸"
 STICKER_ATTRIBUTES = ("客户", "贴纸型号", "贴纸版本")
-PRODUCT_FIELDS = {"item_code", "item_name", "qty", "uom", "rate", "standalone"}
-MAPPING_FIELDS = (PRODUCT_FIELDS - {"standalone"}) | {"product_row", "sticker_model", "sticker_version"}
+PRODUCT_FIELDS = {"item_code", "item_name", "qty", "uom", "rate", "standalone", "is_free_item"}
+MAPPING_FIELDS = (PRODUCT_FIELDS - {"standalone", "is_free_item"}) | {"product_row", "sticker_model", "sticker_version"}
 BUNDLE_MAPPING_FIELDS = {"product_row", "sticker_row"}
 PRODUCT_SHORTHANDS = {f"山东{color}方" for color in "绿灰蓝粉"}
 STANDALONE_STICKER_WARNING = (
@@ -359,6 +359,21 @@ def _free_sticker_rate(values, field, issues):
 	return Decimal(0)
 
 
+def _free_service_rate(item, values, field, issues):
+	"""Allow an explicitly free non-stock service row only."""
+	if item.get("is_stock_item"):
+		_issue(issues, "free_stock_item_not_allowed", field + ".is_free_item",
+			"库存商品不能标记为免费服务。")
+	if "rate" not in values:
+		_issue(issues, "free_service_rate_required", field + ".rate",
+			"免费服务行必须明确传入单价 0，不能从物料名称或默认价格推断。")
+	rate = _number(values.get("rate"), field + ".rate", issues, allow_zero=True)
+	if rate is not None and rate != 0:
+		_issue(issues, "free_service_rate_must_be_zero", field + ".rate",
+			"已标记为免费服务时，单价必须为 0。")
+	return Decimal(0) if rate == 0 else None
+
+
 def _same_stock_quantity(product, sticker):
 	return Decimal(str(product["stock_qty"])) == Decimal(str(sticker["stock_qty"]))
 
@@ -497,8 +512,14 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 			_number(values.get("qty"), field + ".qty", issues)
 			continue
 		is_sticker = item.get("variant_of") == STICKER_TEMPLATE or item.name.startswith(STICKER_TEMPLATE + "-")
-		rate = _free_sticker_rate(values, field, issues) if is_sticker else (
-			_number(values.get("rate"), field + ".rate", issues) if "rate" in values else None)
+		if "is_free_item" in values and type(values["is_free_item"]) is not bool:
+			_issue(issues, "invalid_flag", field + ".is_free_item", "is_free_item 必须是 true 或 false。")
+		if is_sticker:
+			rate = _free_sticker_rate(values, field, issues)
+		elif values.get("is_free_item") is True:
+			rate = _free_service_rate(item, values, field, issues)
+		else:
+			rate = _number(values.get("rate"), field + ".rate", issues) if "rate" in values else None
 		if "standalone" in values and type(values["standalone"]) is not bool:
 			_issue(issues, "invalid_flag", field + ".standalone", "standalone 必须为 true 或 false。")
 		if values.get("standalone") is True and not is_sticker:
@@ -523,6 +544,8 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 				if values.get("standalone") is True:
 					row["standalone"] = True
 				standalone_sticker_rows.append(row)
+			elif values.get("is_free_item") is True:
+				row["is_free_item"] = 1
 			else:
 				product_rows.append(row)
 				product_docs[index] = (row, item)
