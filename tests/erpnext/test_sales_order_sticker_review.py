@@ -74,6 +74,8 @@ def test_first_order_sticker_choice_appears_in_overall_approval(flow, row_type, 
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
     assert "⚠️ **首单贴纸提醒**" in card
     assert expected in card and "不增加第二次确认" in card
+    assert "免费也保留0元服务行" in card
+    assert "只有明确约定收费时才单独列出" not in card
     assert module._hash(summary) == fingerprint
 
 
@@ -84,6 +86,34 @@ def test_existing_order_suppresses_first_order_reminder_and_permission_failure_i
     assert module._first_order_sticker_review(summary) is None
     harness.frappe.get_list.side_effect = PermissionError("restricted")
     assert "无法确认是否首单" in module._first_order_sticker_review(summary)["message"]
+
+
+@pytest.mark.parametrize("rate", [0, 100])
+def test_confirmed_service_is_in_review_and_not_in_goods_totals(flow, rate):
+    module, harness = flow
+    harness.item("CUSTOM-SERVICE", item_name="贴纸定制500", is_stock_item=0)
+    resolved = harness.call(customization_services=[{"item_code": "CUSTOM-SERVICE", "rate": rate}])
+    assert resolved["status"] == "ready"
+    rows = [native_row("product", "GREEN", 120, 3), native_row("service", "CUSTOM-SERVICE", 1, rate, rate == 0)]
+    summary = module._summary(native_order(rows), resolved)
+    assert summary["product_qty"] == 120
+    assert summary["product_amount"] == 360
+    assert summary["sticker_qty"] == 0
+    assert summary["service_amount"] == rate
+    module._load_plan = lambda _token: {"summary": summary}
+    card = module._confirmation_prompt({"preview_token": "trusted-token"})
+    assert "【服务（免费也保留）】" in card
+    assert "CUSTOM-SERVICE：1件" in card
+    assert ("免费，金额 USD 0.00" if rate == 0 else "单价 USD 100") in card
+    # Saved native rows retain service classification by persisted child-row identity.
+    sources = {row.name: source for row, source in zip(rows, resolved["items"], strict=True)}
+    saved = module._summary(native_order(list(reversed(rows))), resolved, existing=True, row_sources=sources)
+    assert saved["items"][0]["row_type"] == "service"
+    if rate == 0:
+        module._verify_free_rows(native_order(rows), resolved)
+        rows[1].rate = rows[1].amount = 1
+        with pytest.raises(module.OrderInputError, match="免费贴纸或服务"):
+            module._verify_free_rows(native_order(rows), resolved)
 
 
 def test_approval_card_separates_both_sticker_kinds_and_shows_warning_from_trusted_summary(flow):
@@ -103,7 +133,7 @@ def test_approval_card_separates_both_sticker_kinds_and_shows_warning_from_trust
     assert card.index("⚠️ **重点审核：独立销售贴纸**") < card.index("【商品】")
     assert "【配套贴纸】" in card and "【独立销售贴纸】" in card
     assert "STICKER：1000张；单价 USD 0.1，小计 100.00；型号版本 Green/v1" in card
-    assert "STICKER：120张；免费，金额0.00；型号版本 Green/v1；对应商品 GREEN" in card
+    assert "STICKER：120张；免费，金额 USD 0.00；型号版本 Green/v1；对应商品 GREEN" in card
     assert "无需另行确认" in card
 
 

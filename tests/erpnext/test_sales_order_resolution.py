@@ -30,6 +30,7 @@ class Harness:
 			"Customer": {"CUST-1": Doc(name="CUST-1", customer_name="Exact Customer", disabled=0,
 				customer_group="Wholesale", default_currency="EUR", default_price_list="Wholesale EUR")},
 			"Item": {}, "UOM": {"Nos": Doc(name="Nos", must_be_whole_number=1), "Box": Doc(name="Box", must_be_whole_number=1)},
+			"Product Bundle": {},
 		}
 		frappe = types.ModuleType("frappe")
 		frappe.session = Row(user="sales@example.com")
@@ -37,7 +38,7 @@ class Harness:
 		frappe.DoesNotExistError = KeyError
 		frappe.get_doc = self.get_doc
 		frappe.get_all = self.get_all
-		frappe.db = Row(get_value=self.get_value)
+		frappe.db = Row(get_value=self.get_value, exists=self.exists)
 		utils = types.ModuleType("frappe.utils")
 		utils.nowdate = lambda: "2026-09-17"
 		conversion = types.ModuleType("erpnext.stock.doctype.item.item")
@@ -73,6 +74,9 @@ class Harness:
 	def get_value(self, doctype, name, fields, as_dict=False):
 		row = self.data[doctype].get(name)
 		return Row({key: row.get(key) for key in fields}) if row else None
+
+	def exists(self, doctype, filters):
+		return bool(self.get_all(doctype, filters, fields=["name"], limit_page_length=1))
 
 	def item(self, code="GREEN", **kwargs):
 		doc = Doc(name=code, item_name="Driven25 绿色", disabled=0, has_variants=0, is_sales_item=1, is_stock_item=1,
@@ -439,6 +443,109 @@ def test_zero_priced_stock_item_cannot_be_marked_as_free_service(h):
 	result = h.call(items=[{"item_code": "GREEN", "qty": 1, "rate": 0, "is_free_item": True}])
 	assert "free_stock_item_not_allowed" in codes(result)
 	assert result["items"] == []
+
+
+def test_explicit_customization_service_defaults_to_free_real_order_row(h):
+	h.item("SERVICE", item_name="贴纸定制服务500", is_stock_item=0)
+	result = h.call(customization_services=[{"item_name": "贴纸定制服务500"}])
+	assert result["status"] == "ready"
+	service = result["items"][-1]
+	assert (service["row_type"], service["item_code"], service["qty"], service["rate"], service["is_free_item"]) == (
+		"service", "SERVICE", 1, 0, 1)
+	assert service not in result["product_rows"]
+	assert h.data["Item"]["SERVICE"]["permission_checks"] == ["read"]
+
+
+def test_explicit_customization_service_keeps_agreed_price_and_quantity(h):
+	h.sticker()
+	h.item("SERVICE", is_stock_item=0)
+	result = h.call(include_stickers=True,
+		customization_services=[{"item_code": "SERVICE", "qty": 2, "rate": "100.50", "uom": "Nos"}])
+	assert result["status"] == "ready"
+	service = next(row for row in result["items"] if row["row_type"] == "service")
+	assert (service["qty"], service["rate"], service["is_free_item"]) == (2, 100.5, 0)
+	assert [row["item_code"] for row in result["product_rows"]] == ["GREEN"]
+	assert [row["product_item_code"] for row in result["sticker_rows"]] == ["GREEN"]
+
+
+@pytest.mark.parametrize("services", [None, []])
+def test_sticker_selection_never_infers_a_new_customization_service(h, services):
+	h.sticker()
+	h.item("SERVICE", is_stock_item=0)
+	for include_stickers in (False, True):
+		result = h.call(include_stickers=include_stickers, customization_services=services)
+		assert result["status"] == "ready"
+		assert all(row["row_type"] != "service" for row in result["items"])
+
+
+@pytest.mark.parametrize("changes,expected", [
+	({"is_stock_item": 1}, "invalid_customization_service"),
+	({"variant_of": "巧克粉贴纸"}, "invalid_customization_service"),
+	({"denied": True}, "permission_denied"),
+	({"disabled": 1}, "disabled_item"),
+	({"is_sales_item": 0}, "not_sales_item"),
+])
+def test_customization_services_retain_native_item_boundaries(h, changes, expected):
+	h.item("SERVICE", **{"is_stock_item": 0, **changes})
+	result = h.call(customization_services=[{"item_code": "SERVICE"}])
+	assert expected in codes(result)
+	assert result["items"] == []
+
+
+@pytest.mark.parametrize("rate", [-1, "NaN", "Infinity", True, None, "1e400", "1e-400"])
+def test_customization_service_rejects_invalid_prices(h, rate):
+	h.item("SERVICE", is_stock_item=0)
+	result = h.call(customization_services=[{"item_code": "SERVICE", "rate": rate}])
+	assert "invalid_number" in codes(result)
+	assert result["items"] == []
+
+
+@pytest.mark.parametrize("services,expected", [
+	("SERVICE", "invalid_customization_services"),
+	([{}] * 101, "invalid_customization_services"),
+	(["SERVICE"], "invalid_service_row"),
+	([{"item_code": "SERVICE", "qty": 0}], "invalid_number"),
+	([{"item_code": "SERVICE", "is_free_item": True}], "unsupported_fields"),
+])
+def test_customization_service_input_is_bounded_and_explicit(h, services, expected):
+	h.item("SERVICE", is_stock_item=0)
+	result = h.call(customization_services=services)
+	assert expected in codes(result)
+	assert result["items"] == []
+
+
+def test_legacy_free_service_is_classified_and_duplicate_entry_is_rejected(h):
+	h.item("SERVICE", item_name="贴纸定制服务500", is_stock_item=0)
+	items = [{"item_code": "SERVICE", "qty": 1, "rate": 0, "is_free_item": True}]
+	result = h.call(items=items)
+	assert result["status"] == "ready"
+	assert result["items"][0]["row_type"] == "service"
+	assert result["product_rows"] == []
+	result = h.call(items=items, customization_services=[{"item_name": "贴纸定制服务500"}])
+	assert "duplicate_service_input" in codes(result)
+	assert result["items"] == []
+
+
+def test_customization_services_reject_repeated_item_without_silent_merging(h):
+	h.item("SERVICE", item_name="贴纸定制服务500", is_stock_item=0)
+	result = h.call(customization_services=[{"item_code": "SERVICE"}, {"item_name": "贴纸定制服务500"}])
+	assert "duplicate_service_input" in codes(result)
+	assert "一行并明确数量" in result["issues"][0]["message"]
+	assert result["items"] == []
+
+
+@pytest.mark.parametrize("disabled", [0, 1])
+@pytest.mark.parametrize("legacy_input", [False, True])
+def test_non_stock_bundle_parent_cannot_become_customization_service(h, disabled, legacy_input):
+	h.item("BUNDLE", is_stock_item=0)
+	h.data["Product Bundle"]["BUNDLE-DEFINITION"] = Doc(name="BUNDLE-DEFINITION", new_item_code="BUNDLE", disabled=disabled)
+	values = ({"items": [{"item_code": "BUNDLE", "qty": 1, "is_free_item": True, "rate": 0}]}
+		if legacy_input else {"customization_services": [{"item_code": "BUNDLE"}]})
+	result = h.call(**values)
+	assert "bundle_not_service" in codes(result)
+	assert result["items"] == []
+	assert h.data["Item"]["BUNDLE"]["permission_checks"] == ["read"]
+	assert "BUNDLE-DEFINITION" not in repr(result)
 
 
 @pytest.mark.parametrize("color", list("绿灰蓝粉"))

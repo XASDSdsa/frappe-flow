@@ -87,6 +87,10 @@ class SalesOrderGuidanceTests(unittest.TestCase):
         self.assertIn("没有提到贴纸的商品不添加贴纸、不创建组合", module.HINT)
         self.assertIn("失败写入统一回滚", module.HINT)
         self.assertIn("不增加额外确认", module.HINT)
+        self.assertIn("免费也保留0元服务行", module.HINT)
+        self.assertIn("customization_services", module.HINT)
+        self.assertIn("只复用客户已有贴纸不代表再次定制", module.HINT)
+        self.assertNotIn("只有客户明确同意收费时才另列", module.HINT)
 
     def test_replaces_old_multiline_block_and_preserves_surrounding_rules(self):
         module, *_ = load_install()

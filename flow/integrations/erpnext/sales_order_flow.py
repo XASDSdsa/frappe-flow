@@ -23,7 +23,7 @@ from .sales_order_resolution import STANDALONE_STICKER_WARNING, resolve_order_in
 
 SERVICE = "Flow Sales Order"
 TTL = 1800
-VERSION = 4
+VERSION = 5
 DEFAULT_WAREHOUSE = "大坪仓库 - LEYA"
 STAGES = (
     ("inputs", "客户、商品与本人销售员", "核对客户、商品数量、贴纸归属和当前登录客服的销售员关联"),
@@ -303,7 +303,7 @@ def _verify_free_rows(doc, resolved):
         if source.get("is_free_item"):
             row = doc.items[index]
             if row.item_code != source["item_code"] or float(row.rate or 0) != 0 or float(row.amount or 0) != 0:
-                raise OrderInputError("免费贴纸被原生定价改变，本次未保存，请管理员核对定价规则。")
+                raise OrderInputError("免费贴纸或服务被原生定价改变，本次未保存，请管理员核对定价规则。")
 
 
 @_without_price_maintenance()
@@ -446,6 +446,7 @@ def _summary(doc, resolved=None, *, existing=False, row_sources=None):
             "accompanying_sticker_qty": sum(r["stock_qty"] for r in rows if r["row_type"] in {"sticker", "bundle"}),
             "standalone_sticker_qty": sum(r["stock_qty"] for r in standalone),
             "product_amount": sum(r["amount"] for r in rows if r["row_type"] in {"product", "bundle"}),
+            "service_amount": sum(r["amount"] for r in rows if r["row_type"] == "service"),
             "sticker_amount": sum(r["amount"] for r in rows if r["row_type"] in {"sticker", "standalone_sticker"}),
             "accompanying_sticker_amount": sum(r["amount"] for r in rows if r["row_type"] == "sticker"),
             "standalone_sticker_amount": sum(r["amount"] for r in standalone),
@@ -460,7 +461,7 @@ def _summary(doc, resolved=None, *, existing=False, row_sources=None):
 
 def _resolve(request):
     return resolve_order_inputs(**{k: request.get(k) for k in (
-        "customer", "items", "company", "currency", "delivery_date", "delivery_days", "stickers_free", "sticker_mappings", "include_stickers", "base_date", "bundle_mappings")})
+        "customer", "items", "company", "currency", "delivery_date", "delivery_days", "stickers_free", "sticker_mappings", "include_stickers", "base_date", "bundle_mappings", "customization_services")})
 
 
 def _first_order_sticker_review(summary):
@@ -483,7 +484,7 @@ def _first_order_sticker_review(summary):
               "本单未列贴纸：请在整单审核时确认是否需要客户贴纸。")
     return {"title": "首单贴纸提醒", "display_mode": "review_notice", "requires_input": False,
             "message": basis + "\n" + choice +
-            "\n贴纸售价固定为0元；定制服务费只有明确约定收费时才单独列出。此提醒随整单审核，不增加第二次确认，不自动添加贴纸、组合产品或收费项目。"}
+            "\n贴纸售价固定为0元；本次已确认提供的定制服务必须列入订单，免费也保留0元服务行，收费按约定金额。复用旧贴纸不代表新定制。此提醒随整单审核，不增加第二次确认，不自动添加未确认的贴纸、组合产品或服务。"}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):
@@ -502,12 +503,15 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
                         delivery_date: str = "", delivery_days: int = 7, include_stickers: bool = False,
                         stickers_free: bool = True, sticker_mappings: list[dict] | None = None,
                         warehouse: str = "", price_list: str = "", remarks: str = "", new_order: bool = False,
-                        bundle_mappings: list[dict] | None = None):
+                        bundle_mappings: list[dict] | None = None,
+                        customization_services: list[dict] | None = None):
     """集中预检订单，无需批准。items 用 item_code 或完整 item_name、qty，可选 uom。
 
     用户要求配客户贴纸时 include_stickers=true；按实际物理件数一件一张。
     多版本通过 sticker_mappings 指明 product_row（一开始）和贴纸编码或型号版本。
-    所有贴纸销售价为0；已由贴纸投入承担的免费定制服务可用非库存服务物料并明确传 is_free_item=true、rate=0，普通库存商品仍必须有正数售价。巧克粉和贴纸同在 items 时自动检查搭配；AI可用
+    所有贴纸销售价为0；已确认提供的定制服务必须传 customization_services，免费也不得省略。
+    每行用已存在的非库存服务物料 item_code或item_name、qty（默认1）、uom?、rate（免费默认0，收费须约定金额），不要再重复放入items。
+    未提服务或只复用旧贴纸不传此参数，不自动生成服务物料或重复计入成本。普通库存商品仍必须有正数售价。巧克粉和贴纸同在 items 时自动检查搭配；AI可用
     bundle_mappings=[{product_row:1,sticker_row:2}]明确同单搭配，均为原items行号。
     独立/备用贴纸行传standalone=true。组合需一颗巧克粉一张贴纸，歧义集中询问。
     没提到贴纸不自动添加。预检不保留物料或单据写入，批准一次后创建/复用原生产品组合。
@@ -531,6 +535,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
                    "delivery_date": delivery_date or None, "delivery_days": delivery_days, "include_stickers": include_stickers,
                    "stickers_free": stickers_free, "sticker_mappings": sticker_mappings,
                    "bundle_mappings": bundle_mappings,
+                   "customization_services": customization_services,
                    "warehouse": warehouse or None, "price_list": price_list or None,
                    "remarks": remarks, "base_date": nowdate()}
         resolved = _resolve(request)
@@ -689,7 +694,7 @@ def _confirmation_prompt(args):
         for warning in summary.get("warnings", []):
             lines.extend(["", "⚠️ **重点审核：独立销售贴纸**", warning["message"]])
         for kind, heading in (("bundle", "【组合商品：巧克粉＋客户贴纸】"), ("product", "【商品】"), ("sticker", "【配套贴纸】"),
-                              ("standalone_sticker", "【独立销售贴纸】"), ("native", "【其他原生明细】")):
+                              ("standalone_sticker", "【独立销售贴纸】"), ("service", "【服务（免费也保留）】"), ("native", "【其他原生明细】")):
             rows = [r for r in summary["items"] if r["row_type"] == kind]
             if not rows:
                 continue
@@ -697,7 +702,7 @@ def _confirmation_prompt(args):
                 lines.extend(["", heading])
             for row in rows:
                 unit = ("张" if kind in {"sticker", "standalone_sticker"} else "颗" if row['item_code'].startswith('SD-') else "件") if row['uom'] == 'Nos' else row['uom']
-                price = "免费，金额0.00" if row['is_free_item'] else f"单价 {summary['currency']} {row['rate']:g}，小计 {row['amount']:.2f}"
+                price = f"免费，金额 {summary['currency']} 0.00" if row['is_free_item'] else f"单价 {summary['currency']} {row['rate']:g}，小计 {row['amount']:.2f}"
                 detail = ""
                 if kind == "bundle":
                     detail = ("；复用已有组合" if bundle_actions.get(row["item_code"]) == "reuse" else "；批准后新建组合") + f"；贴 {row['sticker_item_name']}，{row['stock_qty']:g}张，贴纸0元"
@@ -717,6 +722,7 @@ def _confirmation_prompt(args):
                       "", "【金额】", f"商品：{summary['currency']} {summary['product_amount']:.2f}",
                       f"配套贴纸：{summary['currency']} {summary['accompanying_sticker_amount']:.2f}",
                       f"独立贴纸：{summary['currency']} {summary['standalone_sticker_amount']:.2f}",
+                      *([f"服务：{summary['currency']} {summary['service_amount']:.2f}"] if any(r['row_type'] == 'service' for r in summary['items']) else []),
                       f"已配置税费：{summary['currency']} {summary['tax_total']:.2f}",
                       f"订单总额：{summary['currency']} {summary['grand_total']:.2f}",
                       "未核定的运费未另行添加。", "", "默认值可修改。请核对完整订单，正确后点批准；需修改请点拒绝并说明。",

@@ -17,6 +17,7 @@ from frappe.utils import nowdate
 STICKER_TEMPLATE = "巧克粉贴纸"
 STICKER_ATTRIBUTES = ("客户", "贴纸型号", "贴纸版本")
 PRODUCT_FIELDS = {"item_code", "item_name", "qty", "uom", "rate", "standalone", "is_free_item"}
+SERVICE_FIELDS = PRODUCT_FIELDS - {"standalone", "is_free_item"}
 MAPPING_FIELDS = (PRODUCT_FIELDS - {"standalone", "is_free_item"}) | {"product_row", "sticker_model", "sticker_version"}
 BUNDLE_MAPPING_FIELDS = {"product_row", "sticker_row"}
 PRODUCT_SHORTHANDS = {f"山东{color}方" for color in "绿灰蓝粉"}
@@ -359,8 +360,15 @@ def _free_sticker_rate(values, field, issues):
 	return Decimal(0)
 
 
+def _reject_bundle_service(item, field, issues):
+	# Non-stock bundle parents still deliver goods, even if their bundle is disabled.
+	if not item.get("is_stock_item") and frappe.db.exists("Product Bundle", {"new_item_code": item.name}):
+		_issue(issues, "bundle_not_service", field, "组合商品不能作为定制服务，请通过商品行选择。")
+
+
 def _free_service_rate(item, values, field, issues):
 	"""Allow an explicitly free non-stock service row only."""
+	_reject_bundle_service(item, field, issues)
 	if item.get("is_stock_item"):
 		_issue(issues, "free_stock_item_not_allowed", field + ".is_free_item",
 			"库存商品不能标记为免费服务。")
@@ -469,7 +477,8 @@ def _existing_bundle_pairs(product_docs, standalone_rows, bundle_mappings, legac
 
 
 def resolve_order_inputs(customer, items, company=None, currency=None, delivery_date=None,
-	delivery_days=7, stickers_free=True, sticker_mappings=None, include_stickers=False, base_date=None, bundle_mappings=None):
+	delivery_days=7, stickers_free=True, sticker_mappings=None, include_stickers=False, base_date=None, bundle_mappings=None,
+	customization_services=None):
 	"""Collect all actionable input problems, returning no executable rows on error.
 
 	Item rows accept item_code/item_name, qty, optional uom, rate and standalone.
@@ -480,6 +489,8 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 	this is the number of physical goods even when sold in a different sales UOM.
 	Every paired sticker has the same physical quantity as its product and is eligible
 	for one native sales bundle. This resolver does not create bundle definitions.
+	Explicit customization services use existing non-stock sales items, defaulting
+	to one unit at zero sale price. Stickers alone never imply a new service.
 	"""
 	issues, warnings = [], []
 	user, sales_team = resolve_sales_identity(issues)
@@ -545,10 +556,41 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 					row["standalone"] = True
 				standalone_sticker_rows.append(row)
 			elif values.get("is_free_item") is True:
+				row["row_type"] = "service"
 				row["is_free_item"] = 1
 			else:
 				product_rows.append(row)
 				product_docs[index] = (row, item)
+	if customization_services is None:
+		customization_services = []
+	elif not isinstance(customization_services, list) or len(customization_services) > 100:
+		_issue(issues, "invalid_customization_services", "customization_services", "定制服务必须是最多 100 行的列表。")
+		customization_services = []
+	input_item_codes = {row["item_code"] for row in input_rows}
+	for index, values in enumerate(customization_services, 1):
+		field = f"customization_services[{index}]"
+		before = len(issues)
+		if not isinstance(values, dict):
+			_issue(issues, "invalid_service_row", field, "每行定制服务必须是包含服务物料的对象。")
+			continue
+		unknown = set(values) - SERVICE_FIELDS
+		if unknown:
+			_issue(issues, "unsupported_fields", field, "定制服务包含不支持的字段：" + ", ".join(sorted(map(str, unknown))))
+		rate = _number(values.get("rate", 0), field + ".rate", issues, allow_zero=True)
+		item = _item(values, field, issues)
+		if not item:
+			continue
+		if (item.get("is_stock_item") or item.get("variant_of") == STICKER_TEMPLATE
+			or item.name == STICKER_TEMPLATE or item.name.startswith(STICKER_TEMPLATE + "-")):
+			_issue(issues, "invalid_customization_service", field, "定制服务必须选择非库存销售服务物料，不能使用商品或贴纸。")
+		_reject_bundle_service(item, field, issues)
+		if item.name in input_item_codes:
+			_issue(issues, "duplicate_service_input", field, "同一服务重复列出，请只保留一行并明确数量，避免重复计费。")
+		input_item_codes.add(item.name)
+		quantity = _quantity(item, values, field, issues, default_qty=1)
+		if quantity and len(issues) == before:
+			input_rows.append({"row_type": "service", "item_code": item.name, "item_name": item.get("item_name"),
+				**quantity, "delivery_date": date_value, "rate": _native_number(rate), "is_free_item": int(rate == 0)})
 	if sticker_mappings is None:
 		sticker_mappings = []
 	elif not isinstance(sticker_mappings, list):
