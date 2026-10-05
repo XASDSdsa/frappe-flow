@@ -144,8 +144,6 @@ function sendOther() {
 .flow-confirm-body {
 	margin: 8px 0 0;
 	padding: 8px 10px;
-	max-height: 220px;
-	overflow: auto;
 	background: var(--surface-gray-1);
 	border: 1px solid var(--outline-gray-1);
 	border-radius: 6px;
