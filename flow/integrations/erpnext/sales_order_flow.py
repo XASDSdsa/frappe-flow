@@ -566,11 +566,9 @@ def _first_order_sticker_review(summary, confirmed=False):
         return {"title": "首单已确认", "display_mode": "review_notice", "requires_input": False,
                 "message": basis + "客服已确认：" + ("配客户贴纸，见明细" if selected else "不配客户贴纸") + "；" +
                            ("贴纸制作服务 " + "、".join(services) + "，见服务行" if services else "不收贴纸制作服务") + "。"}
-    choice = ("本单已选择贴纸：请核对对应商品、贴纸型号／版本和数量。" if selected else
-              "本单未列贴纸：请在整单审核时确认是否需要客户贴纸。")
+    choice = "本单已选择贴纸，请核对型号版本和数量。" if selected else "本单未列贴纸，请确认是否需要。"
     return {"title": "首单贴纸提醒", "display_mode": "review_notice", "requires_input": False,
-            "message": basis + "\n" + choice +
-            "\n贴纸售价固定为0元；本次已确认提供的定制服务必须列入订单，免费也保留0元服务行，收费按约定金额。复用旧贴纸不代表新定制。此提醒随整单审核，不增加第二次确认，不自动添加未确认的贴纸、组合产品或服务。"}
+            "message": basis + choice + "制作服务免费也保留0元服务行，收费按约定金额；不增加第二次确认。"}
 
 
 def _first_order_question(resolved):
@@ -590,9 +588,7 @@ def _first_order_question(resolved):
     services = [{"item_code": row["item_code"], "rate": row.get("rate")}
                 for row in resolved["items"] if row["row_type"] == "service"]
     return {**options, "selected_stickers": selected, "selected_services": services,
-            "question": "该客户是首单（当前账号未查到未取消的历史订单）。请一次确认：1. 是否配客户贴纸、用哪个型号版本"
-                        "（见 stickers；没有合适版本需先建贴纸）；2. 贴纸制作服务：不涉及、免费（保留0元服务行）"
-                        "或收费（选 services 中的物料并约定金额）。"}
+            "question": "首单请确认：1. 配哪个贴纸版本，或不配；2. 制作服务选哪项、收多少（免费填0，不涉及就不加）。"}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):

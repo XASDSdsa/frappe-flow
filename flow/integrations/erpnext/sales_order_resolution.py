@@ -389,7 +389,11 @@ def first_order_options(customer):
 		if (row["name"].startswith("FLOW-COMBO-") or frappe.db.exists("Product Bundle", {"new_item_code": row["name"]})
 			or not _readable("Item", row["name"])):
 			continue
-		services.append({"item_code": row["name"], "item_name": row.get("item_name")})
+		prices = frappe.get_all("Item Price", filters={"item_code": row["name"], "selling": 1},
+			fields=["price_list", "currency", "price_list_rate"], limit_page_length=3)
+		services.append({"item_code": row["name"], "item_name": row.get("item_name"),
+			"reference_prices": [{"price_list": p.get("price_list"), "currency": p.get("currency"),
+				"rate": float(p.get("price_list_rate") or 0)} for p in prices]})
 	return {"stickers": stickers, "services": services[:10]}
 
 

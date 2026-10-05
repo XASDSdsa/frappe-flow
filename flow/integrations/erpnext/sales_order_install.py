@@ -52,7 +52,7 @@ HINT = (
 
 ### 首单贴纸与制作服务
 
-- 预检返回 `first_order_choices`（`first_order_choices_required`）表示首单，尚未生成批准卡片。在一条回复里先用表格列出本单商品，再用表格列出该客户已有贴纸（型号 · 版本）和可选贴纸制作服务物料，一次问清两件事：是否配贴纸、用哪个版本；制作服务不涉及、免费还是收费及金额。
+- 预检返回 `first_order_choices`（`first_order_choices_required`）表示首单，尚未生成批准卡片。在一条回复里先用表格列出本单商品，再用表格列出该客户已有贴纸（型号 · 版本）和可选贴纸制作服务物料（含 `reference_prices` 参考售价），一次问清两件事：是否配贴纸、用哪个版本；制作服务选哪项、收多少（免费为0，不涉及则不加）。参考售价只作提示，金额以客服回答为准。提问保持简短，不附长篇规则说明。
 - `selected_stickers`/`selected_services` 是本单已选内容，直接写明，只问未确定的部分；不分多轮追问，不先弹批准卡片。
 - 客服回答后按回答传 `sticker_mappings`/`include_stickers` 和 `customization_services`（免费传 `rate=0`，不涉及则不传），加 `first_order_confirmed=true` 重新预检；批准卡片只显示一行“首单已确认”。
 - 客服本轮已明确说明首单贴纸和制作服务时，可直接传 `first_order_confirmed=true`，不重复询问。
