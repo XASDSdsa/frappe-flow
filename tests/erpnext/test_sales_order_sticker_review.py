@@ -72,10 +72,10 @@ def test_first_order_sticker_choice_appears_in_overall_approval(flow, row_type, 
         fields=["name"], limit_page_length=1)
     module._load_plan = lambda _token: {"summary": summary, "sticker_service_review": review}
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
-    assert "⚠️ **首单贴纸提醒**" in card
-    assert expected in card and "不增加第二次确认" in card
-    assert "免费也保留0元服务行" in card
-    assert "只有明确约定收费时才单独列出" not in card
+    assert "首单贴纸提醒" in card["prompt"]
+    assert expected in card["prompt"] and "不增加第二次确认" in card["prompt"]
+    assert "免费也保留0元服务行" in card["prompt"]
+    assert "只有明确约定收费时才单独列出" not in card["prompt"]
     assert module._hash(summary) == fingerprint
 
 
@@ -102,9 +102,11 @@ def test_confirmed_service_is_in_review_and_not_in_goods_totals(flow, rate):
     assert summary["service_amount"] == rate
     module._load_plan = lambda _token: {"summary": summary}
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
-    assert "【服务（免费也保留）】" in card
-    assert "| CUSTOM-SERVICE | 1 件 |" in card
-    assert ("| 免费 | USD 0.00 |" if rate == 0 else "| USD 100.00 |") in card
+    assert card["table"]["columns"] == ["名称", "数量", "单价", "小计"]
+    service = next(row for row in card["table"]["rows"] if row[0] == "CUSTOM-SERVICE")
+    assert service[1] == "1 件"
+    assert service[2] == ("免费" if rate == 0 else "USD 100.00")
+    assert service[3] == ("USD 0.00" if rate == 0 else "USD 100.00")
     # Saved native rows retain service classification by persisted child-row identity.
     sources = {row.name: source for row, source in zip(rows, resolved["items"], strict=True)}
     saved = module._summary(native_order(list(reversed(rows))), resolved, existing=True, row_sources=sources)
@@ -130,11 +132,12 @@ def test_approval_card_separates_both_sticker_kinds_and_shows_warning_from_trust
     assert summary["accompanying_sticker_amount"] == 0
     module._load_plan = lambda _token: {"summary": summary}
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
-    assert card.index("⚠️ **重点审核：独立销售贴纸**") < card.index("【商品】")
-    assert "【配套贴纸】" in card and "【独立销售贴纸】" in card
-    assert "| STICKER（Green/v1） | 1000 张 | USD 0.10 | USD 100.00 |" in card
-    assert "| STICKER（Green/v1；对应商品 GREEN） | 120 张 | 免费 | USD 0.00 |" in card
-    assert "无需另行确认" in card
+    assert "重点审核" in card["prompt"] and "无需另行确认" in card["prompt"]
+    labels = [row[0] for row in card["table"]["rows"]]
+    assert "STICKER（Green/v1）" in labels
+    assert card["table"]["rows"][labels.index("STICKER（Green/v1）")][1:] == ["1000 张", "USD 0.10", "USD 100.00"]
+    companion = next(row for row in card["table"]["rows"] if row[2] == "免费")
+    assert companion[1] == "120 张" and companion[3] == "USD 0.00"
 
 
 def test_existing_order_reordered_rows_use_persisted_child_identity_not_position(flow):

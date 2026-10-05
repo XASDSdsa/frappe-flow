@@ -39,6 +39,9 @@ class Question:
 	# Tool confirmations may carry a trusted human-readable review body in addition
 	# to the generic tool title and arguments shown by the client.
 	show_prompt: bool = False
+	# Sales-order approval carries the line items as rows. The prompt stays short text.
+	table: dict | None = None
+	note: str | None = None
 
 
 @dataclass
@@ -438,8 +441,15 @@ def _assistant_message(response: ChatResponse) -> dict[str, Any]:
 def _confirmation_question(call: ToolCall, tool: Tool) -> Question:
 	"""Build the approval prompt shown to the user for a `requires_confirmation` tool call.
 	Uses the tool's `confirm_prompt` for a plain-English summary, falling back to a JSON dump."""
+	table = note = None
 	if tool.confirm_prompt:
-		body = tool.confirm_prompt(call.arguments)
+		raw = tool.confirm_prompt(call.arguments)
+		if isinstance(raw, dict):
+			body = raw.get("prompt") or ""
+			table = raw.get("table") if isinstance(raw.get("table"), dict) else None
+			note = raw.get("note") or None
+		else:
+			body = raw
 	else:
 		body = json.dumps(call.arguments, indent=2, default=str)
 	return Question(
@@ -447,6 +457,8 @@ def _confirmation_question(call: ToolCall, tool: Tool) -> Question:
 		options=["Approve", "Deny"],
 		allow_other=True,
 		show_prompt=bool(tool.confirm_prompt),
+		table=table,
+		note=note,
 	)
 
 

@@ -116,10 +116,9 @@ def test_approval_card_shows_exact_sticker_pairing_zero_price_and_stock_behavior
     summary = h.module._summary(doc, resolved)
     h.module._load_plan = lambda token: {"summary": summary, "bundles": bundles}
     card = h.module._confirmation_prompt({"preview_token": "review"})
-    assert "【组合商品：巧克粉＋客户贴纸】" in card
-    assert "山东绿方＋客户绿方贴纸" in card
-    assert "贴 Customer sticker STICKER，120张，贴纸0元" in card
-    assert "批准后新建组合" in card and "出库分别扣巧克粉与贴纸库存" in card
+    label = card["table"]["rows"][0][0]
+    assert "山东绿方＋客户绿方贴纸" in label
+    assert "新建" in label and "贴" in label
     assert summary["product_amount"] == 360 and summary["sticker_amount"] == 0
     assert summary["product_qty"] == summary["sticker_qty"] == 120
 

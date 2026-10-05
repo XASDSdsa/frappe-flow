@@ -815,60 +815,56 @@ def _create_sales_order_draft(preview_token: str):
         return _error(exc, steps, stage, rolled_back=True)
 
 
+def _approval_unit(row):
+    if row["uom"] != "Nos":
+        return row["uom"]
+    if row["row_type"] in {"sticker", "standalone_sticker"}:
+        return "张"
+    if str(row["item_code"]).startswith("SD-"):
+        return "颗"
+    return "件"
+
+
+def _approval_label(row, bundle_actions):
+    label = row["item_name"]
+    if row["row_type"] == "bundle":
+        action = "复用" if bundle_actions.get(row["item_code"]) == "reuse" else "新建"
+        label = f"{row['item_name']}（{action}，贴 {row['sticker_item_name']}）"
+    elif row["row_type"] in {"sticker", "standalone_sticker"}:
+        identity = "/".join(str(row.get(key)) for key in ("sticker_model", "sticker_version") if row.get(key))
+        if identity:
+            label = f"{row['item_name']}（{identity}）"
+    return label
+
+
 def _confirmation_prompt(args):
-    """Build the actual approval card from trusted preview contents, not AI prose."""
+    """Build the approval card from the trusted preview. Line items are a real table."""
     try:
         plan = _load_plan(args.get("preview_token"))
         bundle_actions = {b["item_code"]: b["disposition"] for b in plan.get("bundles", [])}
         summary = plan["summary"]
-        lines = ["🔵 请整体审核：销售订单草稿（尚未保存）", "", "客户：" + summary["customer_name"]]
+        header = ["客户：" + summary["customer_name"]]
         if review := plan.get("sticker_service_review"):
-            lines.extend(["", "⚠️ **" + review["title"] + "**", review["message"]])
+            header.append(review["title"] + "：" + review["message"])
         for warning in summary.get("warnings", []):
-            lines.extend(["", "⚠️ **重点审核：独立销售贴纸**", warning["message"]])
-        for kind, heading in (("bundle", "【组合商品：巧克粉＋客户贴纸】"), ("product", "【商品】"), ("sticker", "【配套贴纸】"),
-                              ("standalone_sticker", "【独立销售贴纸】"), ("service", "【服务（免费也保留）】"), ("native", "【其他原生明细】")):
-            rows = [r for r in summary["items"] if r["row_type"] == kind]
-            if not rows:
-                continue
-            if heading:
-                lines.extend(["", heading])
-            lines.extend(["| 名称 | 数量 | 单价 | 小计 |", "| --- | --- | --- | --- |"])
-            for row in rows:
-                unit = row["uom"] if row["uom"] != "Nos" else (
-                    "张" if kind in {"sticker", "standalone_sticker"} else "颗" if row["item_code"].startswith("SD-") else "件")
-                label = row["item_name"]
-                if kind == "bundle":
-                    action = "复用已有组合" if bundle_actions.get(row["item_code"]) == "reuse" else "批准后新建组合"
-                    label = f"{row['item_name']}（{action}；贴 {row['sticker_item_name']} {row['stock_qty']:g}张，贴纸0元）"
-                elif kind in {"sticker", "standalone_sticker"}:
-                    notes = []
-                    identity = "/".join(str(row.get(key)) for key in ("sticker_model", "sticker_version") if row.get(key))
-                    if identity:
-                        notes.append(identity)
-                    if row.get("product_item_code"):
-                        notes.append("对应商品 " + row["product_item_code"])
-                    if notes:
-                        label = row["item_name"] + "（" + "；".join(notes) + "）"
-                price = "免费" if row["is_free_item"] else f"{summary['currency']} {row['rate']:.2f}"
-                cells = [label, f"{row['qty']:g} {unit}", price, f"{summary['currency']} {row['amount']:.2f}"]
-                lines.append("| " + " | ".join(cell.replace("|", "｜").replace("\n", " ") for cell in cells) + " |")
-        if plan.get("bundles"):
-            lines.append("组合按已审核搭配复用或新建；出库分别扣巧克粉与贴纸库存。")
-        warehouses = list(dict.fromkeys(r['warehouse'] for r in summary['items'] if r['warehouse']))
-        lines.extend(["", "【交货与负责人】", "发货仓库：" + "、".join(warehouses),
-                      "销售员：" + summary["sales_team"][0]["sales_person"] + "（默认当前客服，业绩100%）",
-                      "交货截止：" + summary['delivery_date'] + " 23:59前（" + summary["timezone"] + "）",
-                      "收货地址：" + (summary['shipping_address_display'] or "未设置收货地址，请核对"),
-                      "", "【金额】", f"商品：{summary['currency']} {summary['product_amount']:.2f}",
-                      f"配套贴纸：{summary['currency']} {summary['accompanying_sticker_amount']:.2f}",
-                      f"独立贴纸：{summary['currency']} {summary['standalone_sticker_amount']:.2f}",
-                      *([f"服务：{summary['currency']} {summary['service_amount']:.2f}"] if any(r['row_type'] == 'service' for r in summary['items']) else []),
-                      f"已配置税费：{summary['currency']} {summary['tax_total']:.2f}",
-                      f"订单总额：{summary['currency']} {summary['grand_total']:.2f}",
-                      "未核定的运费未另行添加。", "", "默认值可修改。请核对完整订单，正确后点批准；需修改请点拒绝并说明。",
-                      "批准后保存草稿，提交和发货由后续业务操作处理。"])
-        return "\n".join(lines)
+            header.append("重点审核：" + warning["message"])
+        rows = []
+        for row in summary["items"]:
+            price = "免费" if row["is_free_item"] else f"{summary['currency']} {row['rate']:.2f}"
+            rows.append([
+                _approval_label(row, bundle_actions),
+                f"{row['qty']:g} {_approval_unit(row)}",
+                price,
+                f"{summary['currency']} {row['amount']:.2f}",
+            ])
+        warehouses = "、".join(dict.fromkeys(r["warehouse"] for r in summary["items"] if r["warehouse"]))
+        note = "\n".join([
+            "仓库：" + warehouses,
+            "交货：" + summary["delivery_date"] + " 23:59前",
+            f"订单总额：{summary['currency']} {summary['grand_total']:.2f}",
+            "核对上表后批准。批准后只保存草稿。",
+        ])
+        return {"prompt": "\n".join(header), "table": {"columns": ["名称", "数量", "单价", "小计"], "rows": rows}, "note": note}
     except Exception as exc:
         return "当前订单方案不可执行：" + strip_html(str(exc))
 

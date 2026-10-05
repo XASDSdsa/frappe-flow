@@ -36,32 +36,16 @@ const displayArgs = computed(() => {
 const showArgs = computed(() => !body.value && Boolean(props.tool) && hasArgs(displayArgs.value));
 const blockKeys = computed(() => blockKeysFor(props.tool?.name));
 const answered = computed(() => props.question._answer !== undefined);
-const bodyBlocks = computed(() => blocks(body.value));
+const bodyLines = computed(() => textLines(body.value));
+const noteLines = computed(() => (props.question.note ? textLines(props.question.note) : []));
+const table = computed(() => {
+	const value = props.question.table;
+	if (!value || !Array.isArray(value.columns) || !Array.isArray(value.rows)) return null;
+	return value;
+});
 
-function blocks(text) {
-	const lines = text.split("\n");
-	const result = [];
-	let index = 0;
-	while (index < lines.length) {
-		if (lines[index].trim().startsWith("|")) {
-			const rows = [];
-			while (index < lines.length && lines[index].trim().startsWith("|")) {
-				const cells = lines[index]
-					.trim()
-					.replace(/^\|/, "")
-					.replace(/\|$/, "")
-					.split("|")
-					.map((cell) => cell.replaceAll("**", "").trim());
-				if (!cells.every((cell) => /^:?-+:?$/.test(cell))) rows.push(cells);
-				index += 1;
-			}
-			if (rows.length) result.push({ type: "table", header: rows[0], rows: rows.slice(1) });
-			continue;
-		}
-		result.push({ type: "line", text: lines[index].replaceAll("**", ""), role: lineRole(lines[index]) });
-		index += 1;
-	}
-	return result;
+function textLines(text) {
+	return text.split("\n").map((line) => ({ text: line.replaceAll("**", ""), role: lineRole(line) }));
 }
 
 function lineRole(text) {
@@ -119,34 +103,33 @@ function sendOther() {
 		<div v-if="showArgs" class="mt-2.5">
 			<ArgsView :arguments="displayArgs" :block-keys="blockKeys" />
 		</div>
-		<div v-else-if="body" class="flow-confirm-body">
-			<template v-for="(block, index) in bodyBlocks" :key="index">
-				<table v-if="block.type === 'table'" class="flow-confirm-table">
-					<thead>
-						<tr>
-							<th
-								v-for="(cell, cellIndex) in block.header"
-								:key="cellIndex"
-								:class="{ num: cellIndex > 0 }"
-							>
-								{{ cell }}
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr v-for="(row, rowIndex) in block.rows" :key="rowIndex">
-							<td
-								v-for="(cell, cellIndex) in row"
-								:key="cellIndex"
-								:class="cellIndex === 0 ? 'name' : cellIndex === row.length - 1 ? 'num money' : 'num'"
-							>
-								{{ cell }}
-							</td>
-						</tr>
-					</tbody>
-				</table>
-				<p v-else :class="block.role">{{ block.text }}</p>
-			</template>
+		<div v-else-if="body || table" class="flow-confirm-body">
+			<p v-for="(line, index) in bodyLines" :key="'line-' + index" :class="line.role">{{ line.text }}</p>
+			<table v-if="table" class="flow-confirm-table">
+				<thead>
+					<tr>
+						<th
+							v-for="(cell, cellIndex) in table.columns"
+							:key="cellIndex"
+							:class="{ num: cellIndex > 0 }"
+						>
+							{{ cell }}
+						</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-for="(row, rowIndex) in table.rows" :key="rowIndex">
+						<td
+							v-for="(cell, cellIndex) in row"
+							:key="cellIndex"
+							:class="cellIndex === 0 ? 'name' : cellIndex === row.length - 1 ? 'num money' : 'num'"
+						>
+							{{ cell }}
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p v-for="(line, index) in noteLines" :key="'note-' + index" :class="line.role">{{ line.text }}</p>
 		</div>
 
 		<div
@@ -218,12 +201,17 @@ function sendOther() {
 }
 .flow-confirm-table {
 	width: 100%;
-	margin-top: 6px;
+	margin-top: 8px;
 	border-collapse: collapse;
-	table-layout: fixed;
+}
+.flow-confirm-table th,
+.flow-confirm-table td {
+	border: 1px solid var(--outline-gray-2);
+	padding: 6px 8px;
+	vertical-align: top;
 }
 .flow-confirm-table th {
-	padding: 0 6px 4px 0;
+	background: var(--surface-gray-2);
 	font-size: 12px;
 	font-weight: 600;
 	line-height: 1.4;
@@ -231,16 +219,10 @@ function sendOther() {
 	text-align: left;
 }
 .flow-confirm-table td {
-	padding: 6px 6px 6px 0;
-	border-top: 1px solid var(--outline-gray-2);
 	font-size: 14px;
 	font-weight: 400;
 	line-height: 1.45;
 	color: var(--flow-body, var(--ink-gray-8));
-	vertical-align: top;
-}
-.flow-confirm-table .name {
-	width: 46%;
 }
 .flow-confirm-table .num {
 	font-variant-numeric: tabular-nums;
