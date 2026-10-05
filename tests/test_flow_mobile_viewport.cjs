@@ -34,15 +34,22 @@ assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
 assert.equal(h.values['--flow-mobile-viewport-top'], undefined);
 h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
-// A tablet's visible area must not be capped by a smaller layout viewport.
+// iPad hides the keyboard but keeps focus; its shortcut bar must not shrink the panel.
 h.focus();
-h.window.innerHeight = 910; h.viewport.height = 1000; h.viewport.offsetTop = 0; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+h.viewport.height = 450; h.viewport.offsetTop = 0; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '450px');
+h.viewport.height = 780; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
+// A tablet's visible area larger than the layout viewport is not a keyboard.
+h.window.innerHeight = 910; h.viewport.height = 1000; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
 // Pinch zoom and a transient zero height keep the last keyboard geometry.
+h.viewport.height = 500; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '500px');
 h.viewport.scale = 2; h.viewport.height = 215; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+assert.equal(h.values['--flow-mobile-viewport-height'], '500px');
 h.viewport.scale = 1; h.viewport.height = 0; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+assert.equal(h.values['--flow-mobile-viewport-height'], '500px');
 h.blur();
 assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
 const fallback = harness(false);
@@ -50,4 +57,4 @@ assert.equal(fallback.values['--flow-mobile-viewport-height'], '850px');
 fallback.window.innerHeight = 600; fallback.fire('w:resize');
 assert.equal(fallback.values['--flow-mobile-viewport-height'], '600px');
 vm.runInContext(source, fallback.context);
-console.log('Mobile viewport: keyboard sizing, dismissal reset, tablet, zoom, fallback and duplicate loading passed.');
+console.log('Mobile viewport: keyboard sizing, dismissal reset, iPad hidden keyboard, tablet, zoom, fallback and duplicate loading passed.');
