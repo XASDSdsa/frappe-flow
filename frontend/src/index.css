@@ -19,6 +19,18 @@
 .flow-panel {
 	font-family: "Inter", "InterVariable", ui-sans-serif, system-ui, sans-serif;
 	font-weight: 400;
+	/* Text roles. New copy uses these four grays plus one warning; do not add another text color.
+	   title   14/500  names and card titles
+	   section 12/600  group labels
+	   body    14/400  sentences and line items
+	   money   14/500  amounts, tabular figures
+	   meta    12/400  hints, addresses, defaults
+	   warn    13/500  the only accent
+	   mono    13/400  item codes only */
+	--flow-title: var(--ink-gray-9);
+	--flow-body: var(--ink-gray-8);
+	--flow-meta: var(--ink-gray-5);
+	--flow-warn: var(--ink-amber-3, #b45309);
 }
 
 /* Even vertical rhythm between an assistant message's blocks (text + tool cards).

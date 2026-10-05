@@ -1,9 +1,9 @@
 /* Styles for streamed assistant markdown (injected via v-html, so it can't use
    utility classes on its elements). Scoped to #flow-root at build time. */
 .md {
-	font-size: var(--text-base);
+	font-size: var(--flow-size-body, 14px);
 	line-height: 1.7;
-	color: var(--ink-gray-8);
+	color: var(--flow-body, var(--ink-gray-8));
 	word-break: break-word;
 }
 .md > *:first-child {
@@ -24,7 +24,7 @@
 	margin: 14px 0 6px;
 	font-weight: var(--weight-semibold);
 	line-height: 1.35;
-	color: var(--ink-gray-9);
+	color: var(--flow-title, var(--ink-gray-9));
 }
 .md h1 {
 	font-size: var(--text-lg);
@@ -38,8 +38,9 @@
 .md h4,
 .md h5,
 .md h6 {
-	font-size: var(--text-sm);
-	color: var(--ink-gray-7);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--flow-meta, var(--ink-gray-5));
 }
 .md ul,
 .md ol {
@@ -57,14 +58,14 @@
 	text-decoration: underline;
 }
 .md strong {
-	font-weight: var(--weight-medium);
-	color: var(--ink-gray-9);
+	font-weight: 500;
+	color: var(--flow-title, var(--ink-gray-9));
 }
 .md blockquote {
 	margin: 8px 0;
 	padding: 2px 12px;
 	border-left: 3px solid var(--outline-gray-2);
-	color: var(--ink-gray-7);
+	color: var(--flow-meta, var(--ink-gray-5));
 }
 .md hr {
 	border: 0;
@@ -114,8 +115,11 @@
 }
 .md th {
 	background: var(--surface-gray-1);
-	font-weight: var(--weight-semibold);
-	color: var(--ink-gray-7);
+	font-weight: 600;
+	color: var(--flow-meta, var(--ink-gray-5));
+}
+.md td {
+	color: var(--flow-body, var(--ink-gray-8));
 }
 .md tr:nth-child(even) td {
 	background: var(--surface-gray-1);

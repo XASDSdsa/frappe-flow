@@ -36,6 +36,20 @@ const displayArgs = computed(() => {
 const showArgs = computed(() => !body.value && Boolean(props.tool) && hasArgs(displayArgs.value));
 const blockKeys = computed(() => blockKeysFor(props.tool?.name));
 const answered = computed(() => props.question._answer !== undefined);
+const bodyLines = computed(() =>
+	body.value.split("\n").map((text) => ({ text: text.replaceAll("**", ""), role: lineRole(text) }))
+);
+
+function lineRole(text) {
+	const line = text.replaceAll("**", "").trim();
+	if (!line) return "flow-type-gap";
+	if (line.startsWith("⚠️") || line.includes("重点审核") || line.includes("已确认")) return "flow-type-warn";
+	if (line.startsWith("【")) return "flow-type-section";
+	if (/^(商品|配套贴纸|独立贴纸|服务|已配置税费|订单总额)[：:]/.test(line)) return "flow-type-money";
+	if (line.startsWith("客户：") || line.startsWith("客户:")) return "flow-type-title";
+	if (line.startsWith("•")) return "flow-type-body";
+	return "flow-type-meta";
+}
 
 // Options are stable tokens ("Approve"/"Deny"); translate only for display.
 // LLM-authored options pass through as-is.
@@ -81,7 +95,9 @@ function sendOther() {
 		<div v-if="showArgs" class="mt-2.5">
 			<ArgsView :arguments="displayArgs" :block-keys="blockKeys" />
 		</div>
-		<pre v-else-if="body" class="flow-confirm-body">{{ body }}</pre>
+		<div v-else-if="body" class="flow-confirm-body">
+			<p v-for="(line, index) in bodyLines" :key="index" :class="line.role">{{ line.text }}</p>
+		</div>
 
 		<div
 			v-if="answered"
@@ -147,11 +163,52 @@ function sendOther() {
 	background: var(--surface-gray-1);
 	border: 1px solid var(--outline-gray-1);
 	border-radius: 6px;
-	font-family: var(--font-stack-monospace, ui-monospace, monospace);
-	font-size: 12.5px;
-	line-height: 1.55;
-	color: var(--ink-gray-8);
+	font-family: inherit;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+.flow-confirm-body p {
+	margin: 0;
+}
+.flow-type-title {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.45;
+	color: var(--flow-title, var(--ink-gray-9));
+}
+.flow-type-section {
+	margin-top: 10px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--flow-meta, var(--ink-gray-5));
+}
+.flow-type-body {
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.5;
+	color: var(--flow-body, var(--ink-gray-8));
+}
+.flow-type-money {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.45;
+	font-variant-numeric: tabular-nums;
+	color: var(--flow-title, var(--ink-gray-9));
+}
+.flow-type-meta {
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.45;
+	color: var(--flow-meta, var(--ink-gray-5));
+}
+.flow-type-warn {
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.45;
+	color: var(--flow-warn, var(--ink-amber-3, #b45309));
+}
+.flow-type-gap {
+	height: 6px;
 }
 </style>
