@@ -14,9 +14,18 @@ class Row(dict):
 
 @pytest.fixture
 def harness(monkeypatch):
+    state = Row(entries=[], invoices=[], mixed=False, uncertain=False, cancelled=set(), noncash=set(),
+                queries=[], services=set())
+
+    def cached(dt, name, field):
+        if dt == "Company":
+            return "CNY"
+        if dt == "Item":
+            return name not in state.services if field == "is_stock_item" else 0
+        return name in ("Nos", "Box")
+
     fake = types.ModuleType("frappe")
-    fake.get_cached_value = lambda dt, name, field: "CNY" if dt == "Company" else name in ("Nos", "Box")
-    state = Row(entries=[], invoices=[], mixed=False, uncertain=False, cancelled=set(), noncash=set(), queries=[])
+    fake.get_cached_value = cached
 
     def sql(query, args=None, **kwargs):
         state.queries.append((query, args))

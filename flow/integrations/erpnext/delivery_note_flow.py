@@ -167,7 +167,8 @@ def get_delivery_note_options(sales_order: str = "", customer: str = "", start: 
 
     已知订单号直接传 sales_order。只有客户时传客户编号 customer，多个订单列出候选；
     未指定订单或客户则分页列出当前账号可读订单。返回行号、销售单位、已出库、草稿占用、
-    可选剩余数量及 selection_token，必须展示后等待客服明确选品或全部出库，不能默认全选。
+    可选剩余数量及 selection_token，必须展示后等待客服明确实物或全部出库，不能默认全选实物。
+    未出过的非库存服务行会在选定实物后按剩余数量默认带上，不扣库存。
     """
     steps, stage = _steps(), "order"
     try:
@@ -273,7 +274,8 @@ def _build_delivery(order, selected, posting_date):
 def preview_delivery_note(selection_token: str, items: list[dict] | None = None, all_remaining: bool = False):
     """客服看到明细并明确选择后预检。items 每行 {row_no 或 sales_order_item, qty}。
 
-    只有客服明确说全部出库才传 all_remaining=true；不能省略选择、不能给普通商品自动补贴纸。
+    只有客服明确说全部出库才传 all_remaining=true；不能省略实物选择、不能给普通商品自动补贴纸。
+    未出过的非库存服务行按剩余数量默认加入本次出库，不扣库存；客服已指定该行数量时沿用指定数量。
     组合商品按原订单的组件比例一起出库，必须展示其巧克粉、贴纸及本次数量供审核。
     返回真实 preview_token 和完整摘要，随后调用创建工具批准一次，预检本身不保存。
     """
@@ -292,7 +294,7 @@ def preview_delivery_note(selection_token: str, items: list[dict] | None = None,
         if plan["scope"] != "direct" and _last_customer_message(plan["scope"]) == plan["listed_after_message"]:
             raise DeliveryInputError("已列出明细，但客服尚未回复选择。本轮不能代替客服全选或自行决定商品。", ["items"])
         selected = select_rows(state["items"], items, all_remaining)
-        _mark(steps, stage, "passed", "已按客服指定行和数量核对；未选择的商品及贴纸不会出库。")
+        _mark(steps, stage, "passed", "已按客服指定的实物行和数量核对；未选择的商品及贴纸不会出库。未出过的服务行按剩余数量默认带上，不扣库存。")
         stage = "preview"
         posting_date = nowdate()
         doc = _build_delivery(order, selected, posting_date)
@@ -400,7 +402,10 @@ def _confirmation_prompt(args):
         for row in summary["items"]:
             original = next(r for r in plan["selected"] if r["sales_order_item"] == row["sales_order_item"])
             unit = "件" if row["uom"] == "Nos" else row["uom"]
-            lines.append(f"• 第{original['row_no']}行 {row['item_name']}：{row['qty']:g} {unit}；仓库：{row['warehouse']}" + ("；免费" if row["is_free_item"] else ""))
+            if original.get("service"):
+                lines.append(f"• 第{original['row_no']}行 {row['item_name']}：{row['qty']:g} {unit}；服务，不扣库存" + ("；免费" if row["is_free_item"] else ""))
+            else:
+                lines.append(f"• 第{original['row_no']}行 {row['item_name']}：{row['qty']:g} {unit}；仓库：{row['warehouse']}" + ("；免费" if row["is_free_item"] else ""))
             components = [r for r in summary["packed_items"] if r["sales_order_item"] == row["sales_order_item"]]
             if components:
                 lines.append("  内含：" + "；".join(

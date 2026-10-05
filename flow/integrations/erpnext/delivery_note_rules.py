@@ -22,6 +22,19 @@ def number(value, label="数量"):
         raise DeliveryInputError(f"{label}必须是有限有效数字。") from None
 
 
+def _service_line(order, row):
+    """Non-stock order lines finish delivery only when a delivery note includes them.
+
+    Product-bundle parents are also non-stock, but their packed components are the
+    goods being shipped, so they stay under the explicit selection.
+    """
+    bundled = {component.get("parent_detail_docname") for component in (order.get("packed_items") or [])}
+    if row.name in bundled:
+        return False
+    return (not frappe.get_cached_value("Item", row.item_code, "is_stock_item")
+            and not frappe.get_cached_value("Item", row.item_code, "is_fixed_asset"))
+
+
 def available_rows(order, drafts):
     """Use native delivered_qty (already net of returns), then reserve drafts."""
     rows = []
@@ -47,6 +60,7 @@ def available_rows(order, drafts):
                      "uom": row.uom, "stock_uom": row.stock_uom, "conversion_factor": float(factor),
                      "warehouse": row.warehouse, "rate": float(number(row.get("rate") or 0, "单价")),
                      "is_free_item": bool(row.get("is_free_item")),
+                     "service": _service_line(order, row),
                      "whole_uom": bool(frappe.get_cached_value("UOM", row.uom, "must_be_whole_number")),
                      "whole_stock_uom": bool(frappe.get_cached_value("UOM", row.stock_uom, "must_be_whole_number"))})
     return rows
@@ -65,7 +79,21 @@ def select_rows(rows, items=None, all_remaining=False):
     by_id = {row["sales_order_item"]: row for row in rows}
     by_no = {row["row_no"]: row for row in rows}
     choices = ([{"sales_order_item": r["sales_order_item"], "qty": r["available_qty"]}
-                for r in rows if r["available_qty"] > 0] if all_remaining else items)
+                for r in rows if r["available_qty"] > 0] if all_remaining else list(items))
+    if not all_remaining:
+        # A service finishes the order only by riding a delivery note. Attach the
+        # full remainder to the first explicit shipment unless that row was chosen.
+        chosen = set()
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            if choice.get("sales_order_item"):
+                chosen.add(choice["sales_order_item"])
+            elif choice.get("row_no") in by_no:
+                chosen.add(by_no[choice["row_no"]]["sales_order_item"])
+        for row in rows:
+            if row.get("service") and row["available_qty"] > 0 and row["sales_order_item"] not in chosen:
+                choices.append({"sales_order_item": row["sales_order_item"], "qty": row["available_qty"]})
     if len(choices) > 100:
         raise DeliveryInputError("一次最多选择100行，请分批出库。", ["items"])
     result, seen = [], set()
