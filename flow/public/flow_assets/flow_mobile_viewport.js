@@ -11,11 +11,11 @@
 		// Keep top and height in the same visual viewport. Capping it to the
 		// layout height can leave an uncovered strip when browser chrome changes.
 		const visualHeight = viewport ? viewport.height : window.innerHeight;
-		// During iOS keyboard dismissal Safari can briefly report height=0 and
-		// omit the final resize event. At the bounded recovery point, use the
-		// full layout height so the stale keyboard-sized root cannot remain.
-		const height = recoveringKeyboard && viewport
-			? Math.max(visualHeight, window.innerHeight)
+		// During keyboard dismissal a browser can briefly report height=0. Only
+		// then use the layout viewport as a fallback; a valid visual height must
+		// remain authoritative because Chrome's layout height can include chrome.
+		const height = recoveringKeyboard && viewport && visualHeight <= 0
+			? window.innerHeight
 			: visualHeight;
 		if (!Number.isFinite(height) || height <= 0) return;
 		const top = viewport ? Math.max(0, viewport.offsetTop) : 0;
