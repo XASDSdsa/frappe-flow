@@ -574,36 +574,39 @@ def _first_order_sticker_review(summary, confirmed=False, fast_notice=None):
             "message": basis + choice + "制作服务免费也保留0元服务行，收费按约定金额；不增加第二次确认。"}
 
 
-def _first_order_question(resolved, include_stickers=False):
-    """One consolidated first-order question, asked before any approval card exists.
-
-    A customer with no sticker versions and no sticker request skips the question.
-    The approval card then carries one sentence instead.
-    """
+def _sticker_question(resolved, warehouse):
+    """Block the approval card until sticker and, when required, making-service answers exist."""
     customer = resolved["customer"]["name"]
     try:
-        if frappe.get_list("Sales Order", filters={"customer": customer, "docstatus": ["!=", 2]},
-                           fields=["name"], limit_page_length=1):
-            return None
+        repeat = bool(frappe.get_list("Sales Order", filters={"customer": customer, "docstatus": ["!=", 2]},
+                                      fields=["name"], limit_page_length=1))
+        kind = "repeat" if repeat else "first"
     except frappe.PermissionError:
-        return None
-    from .sales_order_resolution import first_order_options
-    options = first_order_options(customer)
+        kind = "unknown"
+    from .sales_order_resolution import sticker_decision
+    decision = sticker_decision(customer, resolved.get("product_rows"), warehouse)
     selected = [{"item_code": row["item_code"], "sticker_model": row.get("sticker_model"),
                  "sticker_version": row.get("sticker_version"), "product_item_code": row.get("product_item_code")}
                 for row in resolved["items"] if row["row_type"] in {"bundle", "sticker", "standalone_sticker"}]
     services = [{"item_code": row["item_code"], "rate": row.get("rate")}
                 for row in resolved["items"] if row["row_type"] == "service"]
-    wants_stickers = bool(include_stickers or selected)
-    if not options["stickers"] and not wants_stickers:
-        notice = ("该客户没有贴纸，本单不配贴纸；制作服务见服务行。" if services else
-                  "该客户没有贴纸，本单不配贴纸、不收制作费。")
-        return {"fast_path": True, "notice": notice, "stickers": [], "services": options["services"],
-                "selected_stickers": [], "selected_services": services}
-    question = ("该客户还没有贴纸。要配贴纸需先建贴纸物料；不配贴纸请说明，并确认制作费。"
-                if not options["stickers"] else
-                "首单请确认：1. 配哪个贴纸版本，或不配；2. 制作服务选哪项、收多少（免费填0，不涉及就不加）。")
-    return {**options, "selected_stickers": selected, "selected_services": services, "question": question}
+    ask_service = kind != "repeat" or decision["stock_short"]
+    if kind == "repeat" and not ask_service:
+        question = "复购必须先问要不要贴纸，并列出每种贴纸的库存和本单需要数量。库存够用，不主动加制作服务。"
+    elif kind == "repeat":
+        question = "复购必须先问要不要贴纸。库存不够或没有对应贴纸，同时问制作服务选哪项、收多少；免费填0，不需要就不加。"
+    else:
+        archive = "已有贴纸档案" if decision["stickers"] else "没有贴纸档案"
+        question = "首单必须先问两件事（" + archive + "）：1. 要不要贴纸、用哪个版本，没有档案又要贴纸时先建档；2. 要不要制作服务、选哪项、收多少。免费填0，不需要就不加。不能直接出批准卡片。"
+    sticker_text = "配客户贴纸，见明细" if selected else "不配客户贴纸"
+    service_text = "制作服务见服务行" if services else "不收贴纸制作服务"
+    if kind == "repeat":
+        stock_text = "贴纸库存不足" if decision["stock_short"] else "贴纸库存够用"
+        confirmed_line = "复购已确认：" + stock_text + "；" + sticker_text + "；" + service_text + "。"
+    else:
+        confirmed_line = "首单已确认：" + sticker_text + "；" + service_text + "。"
+    return {**decision, "order_kind": kind, "ask_service": ask_service, "question": question,
+            "selected_stickers": selected, "selected_services": services, "confirmed_line": confirmed_line}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):
@@ -634,9 +637,9 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
     bundle_mappings=[{product_row:1,sticker_row:2}]明确同单搭配，均为原items行号。
     独立/备用贴纸行传standalone=true。组合需一颗巧克粉一张贴纸，歧义集中询问。
     没提到贴纸不自动添加。预检不保留物料或单据写入，批准一次后创建/复用原生产品组合。
-    客户或商品未精确匹配时 issues 带 choices 候选。首单（当前账号未查到未取消历史订单）先返回 first_order_choices：
-    客户已有贴纸 stickers、贴纸制作服务 services；问一次贴纸和服务，按回答传参并加 first_order_confirmed=true 重新预检。
-    客服已明确说明首单贴纸和服务时可直接传 true。无权核实历史订单时随审核卡片说明。
+    客户或商品未精确匹配时 issues 带 choices 候选。无论有没有贴纸档案，确认前都返回 first_order_choices，不出批准卡片。
+    首单必须问要不要贴纸、要不要制作服务。复购必须问要不要贴纸，并给出库存 on_hand 和本单 needed_qty；stock_short 时必须同时问制作服务。
+    客服答完才传 first_order_confirmed=true。不得在客服表态前把该参数设为 true。
     业务顺序：先客户档案，再客户贴纸物料，最后销售订单。交期默认自然日七天后当天23:59。
     不要求提供本人姓名、邮箱或销售员。默认创建草稿。new_order 仅用于用户明确要求另开相同新单。
     """
@@ -663,15 +666,14 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         if resolved["status"] != "ready":
             _mark(steps, "inputs", "needs_input", "；".join(issue["message"] for issue in resolved["issues"]))
             return {**resolved, "verified": False, "steps": steps}
-        choices = _first_order_question(resolved, request.get("include_stickers"))
-        fast_notice = choices.get("notice") if choices and choices.get("fast_path") else None
-        if choices and not fast_notice and not first_order_confirmed:
+        choices = _sticker_question(resolved, request.get("warehouse") or DEFAULT_WAREHOUSE)
+        if not first_order_confirmed:
             _mark(steps, "inputs", "needs_input", choices["question"])
             return {"status": "needs_input", "verified": False, "steps": steps, "missing": ["first_order_confirmed"],
                     "issues": [{"code": "first_order_choices_required", "field": "first_order_confirmed",
                                 "message": choices["question"]}],
                     "first_order_choices": choices,
-                    "message": "首单需先确认贴纸和贴纸制作服务；确认后带 first_order_confirmed=true 重新预检，再出批准卡片。"}
+                    "message": "先问清贴纸和制作服务，客服答复后带 first_order_confirmed=true 重新预检，才出批准卡片。"}
         _mark(steps, "inputs", "passed", "已核对当前登录人和唯一启用销售员，客户、商品、贴纸归属与数量有效。")
         stage = "pricing"
         doc, resolved, bundles = _build_reviewed_order(resolved, request, touched=touched)
@@ -686,7 +688,8 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         # The same reviewed request receives the same key even when two preview
         # workers race. Explicit second-order intent gets a distinct identity.
         token = uuid.uuid4().hex if new_order else fingerprint[:32]
-        sticker_service_review = _first_order_sticker_review(summary, confirmed=first_order_confirmed, fast_notice=fast_notice)
+        sticker_service_review = {"title": "贴纸已确认", "display_mode": "review_notice", "requires_input": False,
+                                  "message": choices["confirmed_line"]}
         plan = {"version": VERSION, "user": user, "scope": scope, "site": frappe.local.site,
                 "request": request, "resolved": resolved, "summary": summary, "bundles": bundles, "fingerprint": fingerprint,
                 "sticker_service_review": sticker_service_review,

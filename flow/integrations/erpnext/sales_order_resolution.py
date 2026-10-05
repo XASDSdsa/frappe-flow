@@ -425,6 +425,38 @@ def first_order_options(customer):
 	return {"stickers": stickers, "services": services[:10]}
 
 
+def _color_mark(text):
+	marks = [color for color in "绿灰蓝粉" if color in (text or "")]
+	return marks[0] if len(marks) == 1 else None
+
+
+def _on_hand(item_code, warehouse):
+	rows = frappe.get_all("Bin", filters={"item_code": item_code, "warehouse": warehouse},
+		fields=["actual_qty"], limit_page_length=1)
+	return float(rows[0].get("actual_qty") or 0) if rows else 0.0
+
+
+def sticker_decision(customer, product_rows, warehouse):
+	"""Sticker archive, on-hand quantity and whether this order's colors are covered."""
+	options = first_order_options(customer)
+	demand = {}
+	for row in product_rows or []:
+		color = _color_mark(row.get("item_name") or "")
+		if color:
+			demand[color] = demand.get(color, 0) + float(row.get("stock_qty") or row.get("qty") or 0)
+	stickers = []
+	for sticker in options["stickers"]:
+		color = _color_mark(sticker.get("sticker_model") or sticker.get("item_name") or "")
+		needed = demand.get(color)
+		on_hand = _on_hand(sticker["item_code"], warehouse)
+		stickers.append({**sticker, "on_hand": on_hand, "needed_qty": needed,
+			"enough": None if needed is None else on_hand >= needed})
+	covered = {_color_mark(row.get("sticker_model") or row.get("item_name") or "") for row in stickers}
+	missing = [color for color in demand if color not in covered]
+	stock_short = bool(missing) or any(row["enough"] is False for row in stickers) or (bool(demand) and not stickers)
+	return {**options, "stickers": stickers, "stock_short": stock_short, "missing_colors": missing, "warehouse": warehouse}
+
+
 def _product_sticker_model(item):
 	# An explicit model attribute is evidence; a color or partial name is not.
 	attrs = _attributes(item) or {}
