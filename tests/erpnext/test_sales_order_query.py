@@ -37,6 +37,7 @@ def load_query_tool(monkeypatch):
 
 	resolution = types.ModuleType("flow.integrations.erpnext.sales_order_resolution")
 	resolution.STANDALONE_STICKER_WARNING = ""
+	resolution.STICKER_TEMPLATE = "巧克粉贴纸"
 	resolution.resolve_order_inputs = Mock()
 	monkeypatch.setitem(sys.modules, "flow.integrations.erpnext.sales_order_resolution", resolution)
 	tool_module = types.ModuleType("flow.lib.tool")

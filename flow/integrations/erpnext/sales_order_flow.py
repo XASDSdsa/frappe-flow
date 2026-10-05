@@ -19,7 +19,7 @@ from urllib.parse import quote
 import frappe
 from frappe.utils import nowdate, now_datetime, strip_html
 
-from .sales_order_resolution import STANDALONE_STICKER_WARNING, resolve_order_inputs
+from .sales_order_resolution import STANDALONE_STICKER_WARNING, STICKER_TEMPLATE, resolve_order_inputs
 
 SERVICE = "Flow Sales Order"
 TTL = 1800
@@ -90,8 +90,64 @@ def _read(doctype, name):
     return doc
 
 
+def _order_sticker(code, customer_name, cache):
+	"""Return customer/model/version for a customer sticker item, else None."""
+	if code in cache:
+		return cache[code]
+	details = None
+	if str(code or "").startswith(STICKER_TEMPLATE + "-"):
+		from .sales_order_resolution import _catalog_details
+
+		try:
+			item = _read("Item", code)
+		except frappe.PermissionError:
+			item = None
+		found = _catalog_details(item, {"customer_name": customer_name}) if item else None
+		if found:
+			details = {"customer": customer_name, "sticker_model": found["sticker_model"],
+				"sticker_version": found["sticker_version"], "image": item.get("image") or ""}
+	cache[code] = details
+	return details
+
+
+def _order_detail_table(currency, items):
+	"""Markdown table: one row per order line, bundle components indented below it."""
+	def cell(value):
+		return str(value or "").replace("|", "／").replace("\n", " ").strip()
+
+	def qty(value, uom):
+		return f"{value:g} {uom or ''}".strip()
+
+	def money(value):
+		return f"{value:,.2f}"
+
+	def label(row):
+		sticker = row.get("sticker")
+		if sticker:
+			return f"贴纸：{sticker['customer']} · {sticker['sticker_model']} · {sticker['sticker_version']}"
+		return row.get("item_name") or row.get("item_code")
+
+	delivered = any(row["delivered_qty"] for row in items)
+	header = ["行", "商品", "数量", f"单价（{currency}）", f"金额（{currency}）"] + (["已出库"] if delivered else [])
+	lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+	for row in items:
+		name = label(row) + ("（组合）" if row.get("components") else "")
+		rate = "免费" if row["is_free_item"] else money(row["rate"])
+		values = [row["row_no"], name, qty(row["qty"], row["uom"]), rate, money(row["amount"])]
+		if delivered:
+			values.append(qty(row["delivered_qty"], row["uom"]))
+		lines.append("| " + " | ".join(cell(value) for value in values) + " |")
+		for component in row.get("components") or []:
+			kind = "" if component.get("sticker") else "巧克粉／商品："
+			values = ["└", kind + label(component), qty(component["qty"], component["uom"]), "—", "—"]
+			if delivered:
+				values.append("")
+			lines.append("| " + " | ".join(cell(value) for value in values) + " |")
+	return "\n".join(lines)
+
+
 def query_sales_order_details(sales_order: str = "", customer: str = ""):
-	"""只读返回一张销售订单的完整商品行和收款摘要。
+	"""只读返回一张销售订单的完整商品行、组合组件、贴纸资料和收款摘要。
 
 	传入精确销售订单号时只读取该订单；未传订单号时按当前账号权限选择最新
 	一张未取消订单。该工具不读取出库单或发票，也不执行任意代码，专门处理
@@ -132,6 +188,22 @@ def query_sales_order_details(sales_order: str = "", customer: str = ""):
 				}
 			order = _read("Sales Order", candidates[0]["name"])
 
+		customer_name = order.get("customer_name") or order.customer
+		stickers = {}
+		packed = {}
+		for component in order.get("packed_items") or []:
+			entry = {
+				"item_code": component.item_code,
+				"item_name": component.get("item_name") or component.item_code,
+				"qty": number(component.qty),
+				"uom": component.get("uom") or "",
+				"warehouse": component.get("warehouse") or "",
+			}
+			sticker = _order_sticker(component.item_code, customer_name, stickers)
+			if sticker:
+				entry["sticker"] = sticker
+			packed.setdefault(component.get("parent_detail_docname"), []).append(entry)
+
 		items = []
 		for row in order.get("items") or []:
 			items.append({
@@ -150,6 +222,11 @@ def query_sales_order_details(sales_order: str = "", customer: str = ""):
 				"billed_amt": number(row.get("billed_amt") or 0),
 				"is_free_item": bool(row.get("is_free_item")),
 			})
+			if packed.get(row.name):
+				items[-1]["components"] = packed[row.name]
+			sticker = _order_sticker(row.item_code, customer_name, stickers)
+			if sticker:
+				items[-1]["sticker"] = sticker
 		return {
 			"status": "found",
 			"verified": True,
@@ -165,6 +242,7 @@ def query_sales_order_details(sales_order: str = "", customer: str = ""):
 			"grand_total": number(order.grand_total),
 			"advance_paid": number(order.get("advance_paid") or 0),
 			"items": items,
+			"detail_table": _order_detail_table(order.currency, items),
 			"message": f"已读取销售订单 {order.name} 的完整商品明细和收款摘要。",
 		}
 	except Exception as exc:
