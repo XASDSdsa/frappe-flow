@@ -27,18 +27,25 @@ assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
 h.window.innerHeight = 910; h.viewport.height = 1000; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
 // A real obstruction still reduces the panel, then disappears without a gap.
+h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
 h.viewport.height = 550; h.viewport.offsetTop = 60; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '550px');
 assert.equal(h.values['--flow-mobile-viewport-top'], '60px');
 h.viewport.height = 1000; h.viewport.offsetTop = 0; h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
 // iOS can finish dismissing the keyboard after focusout's first frame.
+h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
 h.viewport.height = 430; h.fire('v:resize');
 h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
 assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
 h.viewport.height = 1000;
 h.flushTimers();
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+// Chrome can report a valid visual height while its layout height is larger.
+h.window.innerHeight = 1100; h.viewport.height = 780; h.fire('v:resize');
+h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
+h.flushTimers();
+assert.equal(h.values['--flow-mobile-viewport-height'], '780px');
 const beforeToolbarFocusout = h.timers.length;
 h.fire('d:focusout', {target: {matches: () => false}});
 assert.equal(h.timers.length, beforeToolbarFocusout);
@@ -50,6 +57,9 @@ assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
 h.viewport.scale = 1; h.viewport.height = 0; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
 h.window.innerHeight = 1000;
+h.viewport.height = 1000; h.fire('w:resize');
+h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
+h.viewport.height = 0;
 h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
 h.flushTimers();
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
