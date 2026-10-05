@@ -4,68 +4,50 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../flow/public/flow_assets/flow_mobile_viewport.js'), 'utf8');
 function harness(withViewport = true) {
-  const listeners = {}, values = {}, frames = [], timers = [];
+  const listeners = {}, values = {}, frames = [];
   const target = prefix => ({addEventListener: (name, fn) => {listeners[prefix + name] = fn;}});
   const viewport = Object.assign(target('v:'), {height: 700, offsetTop: 0, scale: 1});
   const window = Object.assign(target('w:'), {innerHeight: 850, visualViewport: withViewport ? viewport : undefined});
-  const document = Object.assign(target('d:'), {documentElement: {style: {setProperty: (k, v) => {values[k] = v;}}}});
-  const context = vm.createContext({window, document, requestAnimationFrame: fn => (frames.push(fn), frames.length), setTimeout: (fn, delay) => (timers.push({fn, delay}), timers.length), clearTimeout: id => { if (timers[id - 1]) timers[id - 1].fn = null; }, Math, Number});
+  const style = {setProperty: (k, v) => {values[k] = v;}, removeProperty: k => {delete values[k];}};
+  const document = Object.assign(target('d:'), {activeElement: null, documentElement: {style}});
+  const context = vm.createContext({window, document, requestAnimationFrame: fn => (frames.push(fn), frames.length), Math, Number});
   vm.runInContext(source, context);
   const fire = (key, event = {}) => {listeners[key](event); while(frames.length) frames.shift()(123.4);};
-  const flushTimers = () => { while (timers.length) { const timer = timers.shift(); if (timer.fn) timer.fn(); } };
-  return {viewport, window, values, fire, flushTimers, timers, context};
+  const textarea = {matches: selector => selector.includes('textarea')};
+  const focus = () => {document.activeElement = textarea; fire('d:focusin', {target: textarea});};
+  const blur = () => {document.activeElement = null; fire('d:focusout', {target: textarea});};
+  return {viewport, window, values, fire, focus, blur, context};
 }
 const h = harness();
-assert.equal(h.values['--flow-mobile-viewport-height'], '700px');
+// Without a focused field the CSS 100dvh fallback owns the panel size.
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
 h.viewport.height = 390; h.viewport.offsetTop = 90; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '390px');
-assert.equal(h.values['--flow-mobile-viewport-top'], '90px');
-h.viewport.height = 780; h.viewport.offsetTop = 0; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '780px');
-assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
-// A tablet's visible area must not be capped by a smaller layout viewport.
-h.window.innerHeight = 910; h.viewport.height = 1000; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
-// A real obstruction still reduces the panel, then disappears without a gap.
-h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
+// The keyboard reduces the panel to the visible area above it.
+h.focus();
 h.viewport.height = 550; h.viewport.offsetTop = 60; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '550px');
 assert.equal(h.values['--flow-mobile-viewport-top'], '60px');
-h.viewport.height = 1000; h.viewport.offsetTop = 0; h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
+// iOS may still report the keyboard-sized height after focusout; it must not stick.
+h.blur();
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
+assert.equal(h.values['--flow-mobile-viewport-top'], undefined);
+h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
+// A tablet's visible area must not be capped by a smaller layout viewport.
+h.focus();
+h.window.innerHeight = 910; h.viewport.height = 1000; h.viewport.offsetTop = 0; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
-// iOS can finish dismissing the keyboard after focusout's first frame.
-h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
-h.viewport.height = 430; h.fire('v:resize');
-h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
-assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
-h.viewport.height = 1000;
-h.flushTimers();
-assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
-// Chrome can report a valid visual height while its layout height is larger.
-h.window.innerHeight = 1100; h.viewport.height = 780; h.fire('v:resize');
-h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
-h.flushTimers();
-assert.equal(h.values['--flow-mobile-viewport-height'], '780px');
-const beforeToolbarFocusout = h.timers.length;
-h.fire('d:focusout', {target: {matches: () => false}});
-assert.equal(h.timers.length, beforeToolbarFocusout);
-assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
-h.window.innerHeight = 430; h.viewport.height = 430; h.fire('w:orientationchange');
-assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
+// Pinch zoom and a transient zero height keep the last keyboard geometry.
 h.viewport.scale = 2; h.viewport.height = 215; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
-h.viewport.scale = 1; h.viewport.height = 0; h.fire('v:resize');
-assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
-h.window.innerHeight = 1000;
-h.viewport.height = 1000; h.fire('w:resize');
-h.fire('d:focusin', {target: {matches: selector => selector.includes('textarea')}});
-h.viewport.height = 0;
-h.fire('d:focusout', {target: {matches: selector => selector.includes('textarea')}});
-h.flushTimers();
 assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+h.viewport.scale = 1; h.viewport.height = 0; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+h.blur();
+assert.equal(h.values['--flow-mobile-viewport-height'], undefined);
 const fallback = harness(false);
 assert.equal(fallback.values['--flow-mobile-viewport-height'], '850px');
 fallback.window.innerHeight = 600; fallback.fire('w:resize');
 assert.equal(fallback.values['--flow-mobile-viewport-height'], '600px');
 vm.runInContext(source, fallback.context);
-console.log('Mobile viewport: toolbar, keyboard offset/recovery, rotation, zoom, fallback and duplicate loading passed.');
+console.log('Mobile viewport: keyboard sizing, dismissal reset, tablet, zoom, fallback and duplicate loading passed.');
