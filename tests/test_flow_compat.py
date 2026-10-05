@@ -33,3 +33,49 @@ def test_unpaired_tool_calls_receive_a_safe_stub(monkeypatch):
 	result = module._fill_missing_tool_outputs(messages)
 	assert result[-1]["role"] == "tool"
 	assert result[-1]["tool_call_id"] == "call-1"
+
+
+def test_sales_order_detail_result_is_not_truncated(monkeypatch):
+	module = load_compat(monkeypatch)
+	content = "{" + "\"items\":[" + ("{\"row_no\":1}," * 220) + "]}"
+	messages = [
+		{
+			"role": "assistant",
+			"tool_calls": [{"id": "order-1", "function": {"name": "query_sales_order_details"}}],
+		},
+		{"role": "tool", "tool_call_id": "order-1", "content": content},
+	]
+
+	result = module._compact_tool_history(messages)
+
+	assert result[-1]["content"] == content
+
+
+def test_show_image_preview_is_persisted_on_final_assistant_message(monkeypatch):
+	module = load_compat(monkeypatch)
+	markdown = "![flowimg:sticker](/private/files/chat-preview.jpg?fid=file-1)"
+	messages = [
+		{
+			"role": "assistant",
+			"content": None,
+			"tool_calls": [{"id": "call-1", "function": {"name": "show_image"}}],
+		},
+		{"role": "tool", "tool_call_id": "call-1", "content": "{\"ok\": true}"},
+		{"role": "assistant", "content": "图片已展示。"},
+	]
+
+	module._persist_show_image_markdowns(messages, [markdown])
+	module._persist_show_image_markdowns(messages, [markdown])
+
+	assert markdown not in (messages[0]["content"] or "")
+	assert messages[-1]["content"].count(markdown) == 1
+
+
+def test_show_image_markdown_gets_the_trusted_flow_prefix(monkeypatch):
+	module = load_compat(monkeypatch)
+
+	result = module._markdown_from_show_image(
+		{"markdown": "![sticker](/private/files/chat-preview.jpg?fid=file-1)"}
+	)
+
+	assert result == "![flowimg:sticker](/private/files/chat-preview.jpg?fid=file-1)"

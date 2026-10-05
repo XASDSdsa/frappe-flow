@@ -1,5 +1,5 @@
 (() => {
-	const GUARD = 13;
+	const GUARD = 14;
 	if (window.__flowPanelGuardVersion >= GUARD) return;
 	const origFetch = (window.__flowOrigFetch || window.fetch).bind(window);
 	window.__flowOrigFetch = origFetch;
@@ -82,7 +82,7 @@
 		}
 		const response = await origFetch(
 			"/api/method/flow.api.get_chat_original?file=" +
-			encodeURIComponent(url.pathname),
+			encodeURIComponent(url.pathname + url.search),
 			{ credentials: "same-origin" }
 		);
 		if (!response.ok) throw new Error("Original image unavailable");

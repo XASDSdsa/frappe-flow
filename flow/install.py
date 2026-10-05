@@ -7,6 +7,14 @@ import frappe
 
 def after_migrate() -> None:
 	"""Keep Flow-owned settings and workspace links in the Flow module."""
+	if "erpnext" in frappe.get_installed_apps() and frappe.db.exists("DocType", "Flow Tool"):
+		# Keep every客服 workflow reproducible from the Flow repository. This also
+		# migrates the historical database-only order-details Script to the
+		# permission-aware implementation and binds all current tools to the
+		# supported business agents.
+		from flow.integrations.erpnext.install import ensure_workflow_tools
+
+		ensure_workflow_tools(enable=True)
 	if frappe.db.exists("DocType", "Flow Voice Settings"):
 		module = frappe.db.get_value("DocType", "Flow Voice Settings", "module")
 		if module != "Flow":

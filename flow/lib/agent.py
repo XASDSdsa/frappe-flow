@@ -36,6 +36,9 @@ class Question:
 	multi_select: bool = False
 	allow_other: bool = True
 	key: str | None = None
+	# Tool confirmations may carry a trusted human-readable review body in addition
+	# to the generic tool title and arguments shown by the client.
+	show_prompt: bool = False
 
 
 @dataclass
@@ -443,6 +446,7 @@ def _confirmation_question(call: ToolCall, tool: Tool) -> Question:
 		prompt=_("Approve `{0}`?\n\n{1}").format(call.name, body),
 		options=["Approve", "Deny"],
 		allow_other=True,
+		show_prompt=bool(tool.confirm_prompt),
 	)
 
 

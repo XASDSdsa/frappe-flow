@@ -1,0 +1,445 @@
+Flow Voice Settings,Flow 语音设置
+Enabled,已启用
+"Please pass shipment, waybill, sales_order, or delivery_note.",请提供运单号、顺丰运单号、销售订单或出库单。
+No shipment found for waybill {0}.,找不到运单号 {0} 对应的运单。
+No SF shipment found for Delivery Note {0}.,出库单 {0} 没有顺丰运单。
+Shipment {0} was not found.,找不到运单 {0}。
+Ask {0}…,向 {0} 提问…
+Thinking…,正在思考…
+Ran {0} steps,已执行 {0} 个步骤
+Response interrupted,回答已中断
+Changes requested,已要求修改
+Denied,已拒绝
+Failed,失败
+Error,错误
+Loading…,正在加载…
+Setup required…,需要先完成配置…
+Default,默认
+Attach file,添加附件
+Remove,移除
+Stop,停止
+Send,发送
+Cancel,取消
+Submit,提交
+Approve,批准
+Deny,拒绝
+Other…,其他要求…
+Describe what you want instead…,请说明你希望如何处理…
+New chat,新建对话
+Previous sessions,历史对话
+Search sessions…,搜索历史对话…
+Searching…,正在搜索…
+No matching sessions,没有匹配的对话
+No recent sessions,暂无最近对话
+Search…,搜索…
+No matches,没有匹配项
+Close (Ctrl+I),关闭（Ctrl+I）
+Full screen,全屏
+Exit full screen,退出全屏
+Toggle Flow panel,打开或关闭 Flow 对话面板
+Good response,回答有帮助
+Bad response,回答有问题
+Undo rating,撤销评价
+What went wrong? How should it respond instead?,回答哪里有问题？你希望它如何回答？
+Saved to agent memory.,已保存到智能体记忆。
+Could not save feedback.,无法保存反馈。
+Couldn't attach file,无法添加附件
+Uploading…,正在上传…
+Upload failed ({0}),上传失败（{0}）
+Request failed ({0}),请求失败（{0}）
+Show less,收起
+Show more,展开
+Show {0} more,再显示 {0} 项
+Show {0} more lines,再显示 {0} 行
++{0} more,另有 {0} 项
+Record {0},记录 {0}
+Yes,是
+No,否
+records,条记录
+Run Python code,运行 Python 代码
+"Run ""{0}"" on {1}",对 {1} 执行“{0}”
+Flow failed to load. Refresh the page to retry.,Flow 加载失败，请刷新页面后重试。
+Finish setup to start,完成配置后即可使用
+The assistant needs a few things configured first:,使用助手前还需完成以下配置：
+Create and enable a Flow Model with your provider credentials.,配置服务商凭证，并创建、启用一个 Flow 模型。
+Enable a Flow Agent (Flow Agent is created automatically once a model exists).,启用一个 Flow 智能体（模型创建后系统会自动创建智能体）。
+Enable Server Scripts in your site config so the assistant can run code.,在站点配置中启用服务器脚本，让助手能够执行代码。
+"Ask about your data, draft records, or run a task.",可以查询系统数据、起草单据或执行任务。
+Knowledge,知识库
+Conversations,对话
+Configuration,配置
+Flow Agent,Flow 智能体
+Flow Model,Flow 模型
+Flow Provider,Flow 服务商
+Flow Tool,Flow 工具
+Flow Trigger,Flow 触发器
+Flow Session,Flow 会话
+Flow Session Message,Flow 会话消息
+Flow Session Attachment,Flow 会话附件
+Flow Run,Flow 运行记录
+Flow Knowledge Base,Flow 知识库
+Flow Knowledge Source,Flow 知识源
+Flow Knowledge Chunk,Flow 知识片段
+Flow Knowledge Settings,Flow 知识库设置
+Flow Agent Memory,Flow 智能体记忆
+Flow Agent Tool,Flow 智能体工具
+Flow Agent Knowledge Base,Flow 智能体知识库
+Agent,智能体,Flow Agent Memory
+Agent,智能体,Flow Session
+Agent,智能体,Flow Trigger
+Model,模型,Flow Agent
+Model,模型,Flow Session
+Up,有帮助,Flow Run
+Down,无帮助,Flow Run
+Run,运行记录,Flow Session Attachment
+Run,运行记录,Flow Session Message
+Auto Approve Tool Calls,自动批准工具调用
+Auto Sync,自动同步
+Chunk Count,片段数量
+Chunk Index,片段序号
+Chunk Overlap,片段重叠字符数
+Chunk Size,片段大小
+Chunking,文本分段
+Config Snapshot,配置快照
+Content Fields,内容字段
+Context Window,上下文窗口
+Cron Expression,Cron 表达式
+Definition,定义
+Description (LLM-facing),说明（供大模型使用）
+Detail,详情
+Embedding Dimension,向量维度
+Embedding Model,嵌入模型
+Extra Params,额外参数
+Extracted Text,提取的文本
+Feedback Comment,反馈说明
+Feedback Rating,反馈评分
+Hybrid,混合检索
+Import Path,导入路径
+Imported,导入型
+Indexing,索引方式
+Inline,内嵌
+Input,输入
+Input → Output,输入 → 输出
+Iterations,迭代次数
+Keywords,关键词
+Knowledge Bases,知识库
+Last Fired At,上次触发时间
+Last Synced At,上次同步时间
+Max Iterations,最大迭代次数
+Memory Limit,记忆数量上限
+Mode,模式
+Model ID,模型 ID
+Params,参数
+Pending Questions,待确认问题
+Prompt,提示词
+Prompt Template,提示词模板
+Protected,受保护
+Questions,问题
+Requires Confirmation,需要确认
+Resync,重新同步
+Retrieval,检索
+Run As,以此用户身份运行
+Running,运行中
+Search Type,检索方式
+Session,会话
+Slug,标识符
+Source Run,来源运行记录
+Summary (human-facing),摘要（供人工查看）
+System Generated,系统生成
+Target DocType,目标单据类型
+Test Connection,测试连接
+Token Usage,Token 用量
+Tool,工具
+Tool Call ID,工具调用 ID
+Tool Calls,工具调用
+Transcript,完整对话记录
+Trigger,触发方式
+Vector,向量检索
+When,触发事件
+Select any,可多选
+Select one,请选择一项
+Connection OK,连接正常
+Testing connection…,正在测试连接…
+Re-ingestion started,已开始重新导入
+Reconcile started,已开始增量核对
+Resync started,已开始重新同步
+<code>Agent</code> memories are shared with everyone who uses the agent. <code>User</code> memories are visible only to their user.,<code>智能体</code>记忆会与所有使用该智能体的人共享；<code>用户</code>记忆仅对所属用户可见。
+<code>Imported</code> tools are loaded from a Python module by path. <code>Script</code> tools store code in the database and run it in a <code>safe_exec</code> sandbox.,<code>导入型</code>工具会按路径从 Python 模块加载；<code>脚本型</code>工具将代码保存在数据库中，并在 <code>safe_exec</code> 沙箱内运行。
+<code>main</code> must not accept <code>*args</code> or <code>**kwargs</code>.,<code>main</code> 不得接收 <code>*args</code> 或 <code>**kwargs</code>。
+A multi-line condition must set a <code>result</code> variable.,多行条件必须设置 <code>result</code> 变量。
+"API key for this provider. Leave empty for local servers (Ollama, LM Studio) that don't require authentication.",此服务商的 API 密钥。本地服务器（Ollama、LM Studio）若不需要身份验证，可留空。
+API key to authenticate with this model's endpoint. Needed when no Provider is linked.,用于验证此模型端点的 API 密钥。未关联服务商时必须填写。
+Agent configuration captured at run start (instructions + tool slugs).,运行开始时保存的智能体配置（指令和工具标识符）。
+Agents created by Frappe and protected from deletion.,由 Frappe 创建的智能体，受保护且不能删除。
+Characters per chunk for this source. Leave 0 to inherit the global default from Flow Knowledge Settings.,此知识源每个片段的字符数。填写 0 时继承 Flow 知识库设置中的全局默认值。
+Characters shared between consecutive chunks to preserve context across boundaries.,相邻片段之间重复保留的字符数，用于维持跨片段上下文。
+Characters shared between consecutive chunks. Leave 0 to inherit the global default.,相邻片段之间重复保留的字符数。填写 0 时继承全局默认值。
+"Comma-separated fieldnames whose values are indexed, e.g. <code>subject, description, resolution</code>","需要建立索引的字段名，以英文逗号分隔，例如 <code>subject, description, resolution</code>。"
+Conversation this run belongs to.,此运行记录所属的会话。
+DocType of the document that fired the trigger.,触发此操作的单据类型。
+DocType whose events fire this trigger.,发生指定事件时触发此操作的单据类型。
+Document that fired the trigger.,触发此操作的单据。
+"Dotted Python path to the <code>Tool</code> object, e.g. <code>flow.tools.builtins.search_doctypes</code>.",<code>Tool</code> 对象的 Python 点号路径，例如 <code>flow.tools.builtins.search_doctypes</code>。
+"Endpoint for this model, e.g. a self-hosted Ollama (<code>http://localhost:11434</code>) or a proxy. Needed when no Provider is linked.",此模型的端点，例如自行托管的 Ollama（<code>http://localhost:11434</code>）或代理地址。未关联服务商时必须填写。
+Files attached across all runs in this conversation.,此会话中所有运行记录附带的文件。
+Final assistant message when the run completes.,运行完成时智能体给出的最终回答。
+Flow Agent to run when this trigger fires.,触发时要运行的 Flow 智能体。
+Flow Model used to drive this agent.,驱动此智能体的 Flow 模型。
+"Flow Model used to embed chunks and queries. Its Model ID must be an embedding model, e.g. <code>openai/text-embedding-3-small</code>.",用于将文本片段和查询转换为向量的 Flow 模型。模型 ID 必须是嵌入模型，例如 <code>openai/text-embedding-3-small</code>。
+"Flow Tools this agent can call. Defaults to the three primitives (describe, read, execute) on creation.",此智能体可调用的 Flow 工具。创建时默认包含三个基础工具（describe、read、execute）。
+"Flow Trigger that started this run, when source is Trigger.",来源为“触发器”时，用于启动此运行的 Flow 触发器。
+Full chat transcript across all runs in this conversation.,此会话全部运行记录的完整聊天内容。
+Hash of the source document's indexed text; lets re-sync skip unchanged rows.,知识源单据已索引文本的哈希值，用于在重新同步时跳过未更改的记录。
+How this conversation was started. Trigger sessions are hidden from the chat panel's recent list.,此会话的启动方式。由触发器创建的会话不会显示在聊天面板的最近会话列表中。
+How this run was started.,此运行记录的启动方式。
+Hybrid fuses vector similarity with keyword matching. Vector uses similarity alone.,混合检索会结合向量相似度和关键词匹配；向量检索仅使用相似度。
+"Inline: full text injected every turn. Retrieval: chunked and embedded, top matches injected per turn (for oversized files).",内嵌：每轮都注入完整文本。检索：对文本分段并生成向量，每轮仅注入最相关的片段（适用于较大的文件）。
+"Jinja template rendered into the agent input. <code>doc</code> and <code>now</code> are in scope, e.g. <code>Summarize {{ doc.doctype }} {{ doc.name }} and suggest next steps: {{ doc.description }}</code>",渲染后作为智能体输入的 Jinja 模板。可使用 <code>doc</code> 和 <code>now</code>，例如 <code>Summarize {{ doc.doctype }} {{ doc.name }} and suggest next steps: {{ doc.description }}</code>。
+Keep this source in sync with a daily incremental sweep.,每天执行增量扫描，使此知识源保持同步。
+Knowledge bases this agent can search. Empty means all enabled knowledge bases.,此智能体可检索的知识库。留空表示所有已启用的知识库。
+Last time this scheduled trigger fired. Set by the system.,此定时触发器上次执行的时间，由系统自动设置。
+List of tool calls the agent executed.,智能体已执行的工具调用列表。
+"LiteLLM model identifier. With a Provider linked, pick or type just the model (e.g. <code>claude-sonnet-4-6</code>); otherwise use <code>provider/model</code> form, e.g. <code>anthropic/claude-sonnet-4-6</code>, <code>openai/gpt-4.1</code>, <code>ollama/llama3.1</code>",LiteLLM 模型标识符。已关联服务商时，只需选择或填写模型名称（例如 <code>claude-sonnet-4-6</code>）；否则请使用 <code>provider/model</code> 格式，例如 <code>anthropic/claude-sonnet-4-6</code>、<code>openai/gpt-4.1</code>、<code>ollama/llama3.1</code>。
+"LiteLLM provider name, e.g. <code>openai</code>, <code>anthropic</code>, <code>openrouter</code>, <code>gemini</code>. Any Flow Model whose Model ID starts with this provider uses these credentials unless it sets its own.",LiteLLM 服务商名称，例如 <code>openai</code>、<code>anthropic</code>、<code>openrouter</code>、<code>gemini</code>。模型 ID 以此服务商开头的 Flow 模型会使用这里的凭证，模型自身另有设置时除外。
+"Max input tokens. Auto-detected from the model on save; managed by Flow, not user-editable. 0 = unknown.",最大输入 Token 数。保存时根据模型自动识别，由 Flow 管理，用户不能编辑。0 表示未知。
+Maximum characters per chunk.,每个片段允许的最大字符数。
+Maximum number of think → tool → think loops before the run gives up.,本次运行终止前允许的“思考 → 工具 → 思考”最大循环次数。
+Message body. Null for assistant turns that only call tools.,消息正文。智能体仅调用工具而没有文字回答时为空。
+"One short, self-contained fact.",一条简短且可独立理解的事实。
+"Optional JSON filters selecting which documents to index, e.g. <code>{""status"": ""Resolved""}</code>","可选的 JSON 筛选条件，用于选择需要建立索引的单据，例如 <code>{""status"": ""Resolved""}</code>。"
+"Optional JSON object of provider-specific kwargs merged into every call (e.g. <code>{""api_version"": ""2024-02-01""}</code> for Azure). A model's own params take precedence.","可选的 JSON 对象，其中包含每次调用都要合并的服务商专用参数（例如 Azure 的 <code>{""api_version"": ""2024-02-01""}</code>）。模型自身的参数优先。"
+"Optional JSON object passed to the model (e.g. <code>{""temperature"": 0.2, ""max_tokens"": 1024}</code>)","传给模型的可选 JSON 对象，例如 <code>{""temperature"": 0.2, ""max_tokens"": 1024}</code>。"
+"Optional. Override the provider's default endpoint, e.g. a proxy or self-hosted gateway.",可选。覆盖服务商的默认端点，例如代理地址或自行托管的网关。
+Original user input that started the run.,启动此运行的用户原始输入。
+Override the agent's default model for this conversation. Empty falls back to the agent's model.,覆盖此会话中智能体的默认模型。留空时使用智能体自身的模型。
+Pause the run and ask the user to approve each call before this tool executes.,执行此工具前暂停运行，并要求用户批准每次调用。
+"Position of this chunk within its source, starting at 0.",此片段在知识源中的位置，从 0 开始。
+Python source. Must define a top-level <code>main</code> function. Executed in a server-script sandbox. Requires server scripts to be enabled in the bench configuration.,Python 源代码。必须定义顶层 <code>main</code> 函数。代码在服务器脚本沙箱中执行，且需要在 bench 配置中启用服务器脚本。
+Questions waiting on a user answer. Present only when status is Paused.,等待用户回答的问题。仅在状态为“已暂停”时显示。
+Relevant excerpts from the attached file(s):,附件中的相关内容片段：
+"Run the agent as this user, so its tools act with a defined, least-privilege permission scope. Defaults to the trigger's owner when empty. Prefer a purpose-scoped service user over a full administrator.",以此用户身份运行智能体，使工具在明确且最小化的权限范围内执行。留空时默认使用触发器所有者。建议使用专用服务用户，不要使用完整权限的管理员。
+Run this trigger's tool calls without asking for approval. Required for unattended triggers — otherwise the run pauses waiting for a confirmation.,执行此触发器的工具调用时无需请求批准。无人值守的触发器必须启用此项，否则运行会暂停并等待确认。
+Saved Flow Agent driving this conversation. Empty for sessions driven by a code-defined agent.,驱动此会话的已保存 Flow 智能体。由代码定义的智能体驱动时留空。
+Short label for this conversation. Auto-generated from the first user message if left blank.,此会话的简短标题。留空时根据第一条用户消息自动生成。
+Shown to the LLM. Should state what the tool does and how to interpret the return value.,向大模型显示。应说明工具的用途以及如何理解返回值。
+Shown to the agent: what this knowledge base contains and when to search it. Helps the agent decide whether to use it.,向智能体说明此知识库包含哪些内容以及何时检索，帮助智能体判断是否使用它。
+Size in bytes.,文件大小（字节）。
+Snake-cased name the LLM sees. Used as the unique identifier.,大模型可见的 snake_case 名称，用作唯一标识符。
+"Standard 5-field cron, e.g. '0 9 * * 5' for every Friday 09:00.",标准 5 段 Cron 表达式，例如 <code>0 9 * * 5</code> 表示每周五 09:00。
+"System message shown to the LLM. Describe the agent's role, scope, and rules.",向大模型显示的系统消息，用于说明智能体的角色、工作范围和规则。
+The Flow Run that produced this message.,生成此消息的 Flow 运行记录。
+The run (turn) this file was sent with.,发送此文件时对应的运行轮次。
+The user attached file(s) (large; relevant excerpts shown below): {0},用户添加了以下较大的附件（下方仅显示相关内容片段）：{0}
+The user attached the following file(s):,用户添加了以下附件：
+Thumbs rating the user gave this response.,用户对此回答给出的赞或踩评价。
+Tools created by Frappe and protected from deletion.,由 Frappe 创建的工具，受保护且不能删除。
+Vector width of the embedding model. Detected automatically when the embedding model is saved.,嵌入模型的向量宽度，在保存模型时自动识别。
+Watermark for incremental DocType sync: rows modified after this are re-checked.,单据类型增量同步的时间标记；此时间之后修改的记录会重新检查。
+What kind of event fires this trigger.,用于触发此操作的事件类型。
+"When role is 'assistant', the list of tool calls the model requested.",角色为 <code>assistant</code> 时，记录模型请求的工具调用列表。
+"When role is 'tool', the assistant tool_call.id this result answers.",角色为 <code>tool</code> 时，记录此结果所对应的 assistant tool_call.id。
+Which lifecycle event of the target DocType fires this trigger.,目标单据类型发生哪个生命周期事件时触发此操作。
+Agent Locked,智能体已锁定
+Agent Mismatch,智能体不匹配
+Agent Required,必须指定智能体
+Answers must be a JSON object.,回答必须是 JSON 对象。
+Attachments must be a JSON array of file ids.,附件必须是由文件 ID 组成的 JSON 数组。
+Attachments must be a list of file ids.,附件必须是文件 ID 列表。
+Base URL must be an absolute http(s) URL.,基础 URL 必须是完整的 HTTP 或 HTTPS 地址。
+Blocked URL,URL 已被阻止
+Cannot Read PDF,无法读取 PDF
+Cannot Resume,无法继续运行
+Cannot change the agent on an existing session.,不能更改现有会话的智能体。
+Cannot change {0} of system-generated {1} {2}.,不能更改系统生成的 {1} {2} 的 {0}。
+Cannot delete system-generated {0} {1}.,不能删除系统生成的 {0} {1}。
+Cannot remove the system-generated flag from {0} {1}.,不能移除 {0} {1} 的系统生成标记。
+Cannot rename system-generated {0} {1}.,不能重命名系统生成的 {0} {1}。
+Child table fields are not supported as content fields: {0},子表字段不能用作内容字段：{0}
+Chunk Overlap must be smaller than Chunk Size.,片段重叠字符数必须小于片段大小。
+Chunk Size must be at least 1.,片段大小必须至少为 1。
+Chunk settings changed. The {0} existing chunks for this source will be deleted and rebuilt with the new settings. Re-process now?,文本分段设置已更改。此知识源现有的 {0} 个片段将被删除并重新生成。现在重新处理吗？
+Code has invalid Python syntax: {0},代码包含无效的 Python 语法：{0}
+Code is required for Script tools.,脚本型工具必须填写代码。
+Code must define a top-level <code>main</code> function.,代码必须定义顶层 <code>main</code> 函数。
+Code must not call <code>main()</code> directly (line {0}).,代码不能直接调用 <code>main()</code>（第 {0} 行）。
+Content Fields is required for a DocType source.,单据类型知识源必须填写内容字段。
+Could not import tool from {0}: {1},无法从 {0} 导入工具：{1}
+Could not resolve URL host.,无法解析 URL 主机。
+Cron Expression is required for Scheduled triggers.,定时触发器必须填写 Cron 表达式。
+Disabled Agent,智能体未启用
+Disabled Model,模型未启用
+Doc Event is required for DocType Event triggers.,单据事件触发器必须选择单据事件。
+Each attachment must be a file id.,每个附件都必须使用文件 ID。
+Embedding Dimension Mismatch,向量维度不匹配
+Embedding Failed,生成向量失败
+Embedding Model In Use,嵌入模型正在使用中
+Embedding provider returned {0} vectors for {1} inputs.,嵌入服务商为 {1} 条输入返回了 {0} 个向量。
+Empty File,文件为空
+Empty Memory,记忆内容为空
+Extra Params may not include reserved keys: {0}.,额外参数不能包含保留键：{0}。
+Extra Params must be a JSON object.,额外参数必须是 JSON 对象。
+Extra Params must be valid JSON.,额外参数必须是有效的 JSON。
+Failed runs must include an error message.,失败的运行记录必须包含错误消息。
+Feedback Too Long,反馈内容过长
+Feedback applies to finished runs only (this run is {0}).,只能对已结束的运行记录提交反馈（当前状态：{0}）。
+File Too Large,文件过大
+File is required.,必须选择文件。
+Filters must be a JSON object.,筛选条件必须是 JSON 对象。
+Filters must be valid JSON.,筛选条件必须是有效的 JSON。
+Flow Agent {0} is disabled.,Flow 智能体 {0} 未启用。
+Flow Knowledge Settings Required,需要配置 Flow 知识库
+Flow Model {0} is disabled.,Flow 模型 {0} 未启用。
+Import Path is required for Imported tools.,导入型工具必须填写导入路径。
+Import Path must be a dotted Python path (e.g. <code>flow.tools.builtins.search</code>).,导入路径必须是 Python 点号路径，例如 <code>flow.tools.builtins.search</code>。
+Import path {0} is not a Tool or callable.,导入路径 {0} 不是 Tool 对象或可调用对象。
+Imported tools must not define inline code.,导入型工具不能定义内嵌代码。
+Input is required.,必须填写输入内容。
+Invalid Answers,回答格式无效
+Invalid Attachment,附件无效
+Invalid Attachments,附件列表无效
+Invalid Base URL,基础 URL 无效
+Invalid Chunking,文本分段配置无效
+Invalid Code,代码无效
+Invalid Condition,条件无效
+Invalid Content Fields,内容字段无效
+Invalid Cron,Cron 表达式无效
+Invalid Doc Event: {0},单据事件无效：{0}
+Invalid Filters,筛选条件无效
+Invalid Import Path,导入路径无效
+Invalid Input,输入无效
+Invalid Jinja template: {0},Jinja 模板无效：{0}
+Invalid Knowledge Base,知识库无效
+Invalid Max Iterations,最大迭代次数无效
+Invalid Model ID,模型 ID 无效
+Invalid Params,参数无效
+Invalid Provider,服务商无效
+Invalid Rating,评分无效
+Invalid Run,运行记录无效
+Invalid Run As,运行用户无效
+Invalid Scope,记忆范围无效
+Invalid Session,会话无效
+Invalid Signature,函数签名无效
+Invalid Slug,标识符无效
+Invalid Source,知识源无效
+Invalid Template,模板无效
+Invalid Tool,工具无效
+Invalid Type,类型无效
+Invalid condition: {0},条件无效：{0}
+Invalid cron expression: {0},Cron 表达式无效：{0}
+Keep each memory under {0} characters — split or shorten it.,每条记忆不得超过 {0} 个字符，请拆分或缩短内容。
+Keep feedback under {0} characters.,反馈内容不得超过 {0} 个字符。
+Knowledge Not Configured,知识库尚未配置
+Knowledge Store Not Ready,知识库尚未就绪
+Knowledge base title is required.,必须填写知识库标题。
+Knowledge search requires at least one knowledge base.,知识检索至少需要一个知识库。
+Knowledge store has dimension {0} but {1} was requested. Rebuild the knowledge store.,知识库的向量维度为 {0}，但当前模型需要 {1}。请重建知识库。
+Knowledge store is not initialized. Configure Flow Knowledge Settings and ingest a source.,知识库尚未初始化。请配置 Flow 知识库设置并导入知识源。
+LiteLLM is not installed. Run <code>bench setup requirements</code>.,尚未安装 LiteLLM，请运行 <code>bench setup requirements</code>。
+Max Iterations must be at least 1.,最大迭代次数必须至少为 1。
+Memory Too Long,记忆内容过长
+Memory Unavailable,记忆功能不可用
+Memory content is required.,必须填写记忆内容。
+Memory is not configured for this agent.,此智能体尚未配置记忆功能。
+Memory limit reached — consolidate existing memories (pass memory_id) instead of adding.,记忆数量已达上限，请合并现有记忆（传入 memory_id），不要继续新增。
+Missing Code,缺少代码
+Missing Default Agent,缺少默认智能体
+Missing Import Path,缺少导入路径
+Missing User,缺少用户
+Missing main(),缺少 main() 函数
+Model Disabled,模型未启用
+"Model ID must be in <code>provider/model</code> form (e.g. <code>anthropic/claude-sonnet-4-6</code>). Only lowercase provider names and alphanumerics, dashes, dots, colons or slashes in the model part are allowed.",模型 ID 必须采用 <code>provider/model</code> 格式，例如 <code>anthropic/claude-sonnet-4-6</code>。服务商名称只能使用小写字母；模型部分只能包含字母、数字、连字符、点、冒号或斜杠。
+Model Not Permitted,无权使用此模型
+No Knowledge Base,没有可用的知识库
+No content fields configured.,尚未配置内容字段。
+No messages yet.,暂无消息。
+Nothing to Resume,没有可继续的运行
+PDF is password protected and cannot be read.,PDF 受密码保护，无法读取。
+Params may not include reserved keys: {0}.,参数不能包含保留键：{0}。
+Params must be a JSON object.,参数必须是 JSON 对象。
+Params must be valid JSON.,参数必须是有效的 JSON。
+Paused runs must have at least one pending question.,已暂停的运行记录必须至少包含一个待确认问题。
+"Rating must be Up, Down, or None.",评分必须为 Up、Down 或 None。
+Remote file exceeds the size limit.,远程文件超过大小限制。
+Reserved Params,包含保留参数
+Run As must be an enabled user.,运行用户必须是已启用的用户。
+Run In Progress,运行正在进行
+Run Not Finished,运行尚未结束
+Run Paused,运行已暂停
+Run is required.,必须指定运行记录。
+Save the document before testing the connection.,请先保存单据，再测试连接。
+Script tools must not specify an Import Path.,脚本型工具不能指定导入路径。
+Session is required.,必须指定会话。
+Set an embedding model in Flow Knowledge Settings before adding knowledge bases or sources.,添加知识库或知识源前，请先在 Flow 知识库设置中配置嵌入模型。
+Set an embedding model in Flow Knowledge Settings first.,请先在 Flow 知识库设置中配置嵌入模型。
+"Slug must be snake_case: start with a lowercase letter, then lowercase letters, digits or underscores.",标识符必须使用 snake_case：以小写字母开头，后续只能包含小写字母、数字或下划线。
+Target DocType is required for DocType Event triggers.,单据事件触发器必须选择目标单据类型。
+The {0} agent is missing. Create a Flow Model first to auto-provision it.,缺少 {0} 智能体。请先创建 Flow 模型，系统会自动创建该智能体。
+This session already has a run in progress.,此会话已有正在进行的运行。
+This session has a paused run. Resume it before starting a new turn.,此会话有一个已暂停的运行，请先继续该运行再开始新一轮对话。
+This session has no paused run to resume.,此会话没有可继续的已暂停运行。
+This session has no transcript to resume from.,此会话没有可用于继续运行的对话记录。
+This session is bound to agent {0} and cannot be switched.,此会话已绑定智能体 {0}，不能切换。
+This session was created with a code agent; pass agent= to continue it.,此会话由代码定义的智能体创建；继续运行时请传入 agent=。
+Tool Import Failed,工具导入失败
+Type must be Imported or Script.,类型必须为 Imported（导入型）或 Script（脚本型）。
+URL has no host.,URL 缺少主机名。
+URL must use http or https.,URL 必须使用 HTTP 或 HTTPS。
+URL resolves to a non-public address.,URL 解析到了非公网地址。
+Unexpected Code,不应填写代码
+Unexpected Import Path,不应填写导入路径
+Unknown Memory,找不到指定记忆
+"Unknown provider {0}. It must be a LiteLLM provider name (e.g. openai, anthropic, openrouter, gemini).",未知服务商 {0}。请填写 LiteLLM 服务商名称，例如 openai、anthropic、openrouter、gemini。
+Unsaved Changes,存在未保存的更改
+Unsupported File,不支持此文件
+Unsupported Format,不支持此格式
+Unsupported file format: .{0},不支持的文件格式：.{0}
+Unsupported file type: .{0},不支持的文件类型：.{0}
+Unsupported source type: {0},不支持的知识源类型：{0}
+User-scoped memories must have a user.,用户范围的记忆必须指定用户。
+You are not permitted to use Flow Model {0}.,您无权使用 Flow 模型 {0}。
+scope must be 'agent' or 'user'.,scope 必须为 <code>agent</code> 或 <code>user</code>。
+{0} is required for a {1} source.,{1} 知识源必须填写 {0}。
+{0} knowledge chunks were embedded with the current model. Delete all knowledge sources before changing the embedding model.,已有 {0} 个知识片段使用当前模型生成向量。更换嵌入模型前，请先删除所有知识源。
+{0} must be valid JSON.,{0} 必须是有效的 JSON。
+"Approve `{0}`?
+
+{1}","是否批准 `{0}`？
+
+{1}"
+"Create {0} {1} record(s):
+
+{2}","创建 {0} 条 {1} 记录：
+
+{2}"
+Delete {0} {1}: {2},删除 {0} {1}：{2}
+Run '{0}' on {1} {2}: {3},对 {1} {2} 执行“{0}”：{3}
+"Update {0} {1} ({2}):
+
+{3}","更新 {0} {1}（{2}）：
+
+{3}"
+No editable memory {0} — check the id in <agent_memory>.,找不到可编辑的记忆 {0}，请检查 <agent_memory> 中的 ID。
+No permission to delete {0} {1}.,您无权删除 {0} {1}。
+No permission to read {0} {1},您无权读取 {0} {1}。
+No permission to update {0} {1}.,您无权更新 {0} {1}。
+No readable text found in this file.,此文件中没有可读取的文本。
+Not permitted to resume this run.,您无权继续此运行。
+Not permitted to use this file.,您无权使用此文件。
+Not permitted to use this session.,您无权使用此会话。
+Only Paused runs can be resumed (this run is {0}).,只能继续状态为“已暂停”的运行（当前状态：{0}）。
+"Optional Python condition; the trigger fires only if it is truthy. A single expression (e.g. <code>doc.status == ""Open""</code>), or a multi-line script that must assign the verdict to a variable named <code>result</code>. Runs in the server-script sandbox with <code>doc</code> in scope for DocType events. Requires server scripts to be enabled in the bench configuration; without it the condition is treated as not met and the trigger does not fire.","可选的 Python 条件，仅当结果为真时触发。可以填写单个表达式（例如 <code>doc.status == ""Open""</code>），也可以填写多行脚本；多行脚本必须将判断结果赋给 <code>result</code> 变量。单据事件中可使用 <code>doc</code>，条件在服务器脚本沙箱中运行。bench 配置必须启用服务器脚本，否则系统会将条件视为不满足，不会触发。"
+Optional plain-English summary for human reviewers.,可选的简明摘要，供人工审核时查看。
+"Optional search aliases (synonyms, codes, alternate names) that improve retrieval. Used only for keyword matching, never shown to the agent as a fact.",可选的搜索别名（同义词、编码或其他名称），用于改善检索效果。仅参与关键词匹配，不会作为事实展示给智能体。
+Unknown fields for {0}: {1},{0} 中存在未知字段：{1}
+Tools,工具
+Searching Knowledge,正在检索知识库
+Running Document Actions,正在执行单据操作
+Multiple image previews match this attachment. The attachment needs review.,该附件对应多个图片预览，请核查附件关联。
+You do not have permission to read this image or its document.,当前账号无权读取这张图片或其关联单据。
+The image attachment does not belong to the requested document field.,这张图片附件不属于指定单据的图片字段。
+"Multiple image attachments match. Specify the document and image field, or an exact File ID.",图片引用对应多个附件，请指定单据和图片字段，或提供准确的附件编号。
+Image field {0} does not exist on {1}.,{1} 不存在图片字段 {0}。
+No image is set in the requested document field.,指定单据的图片字段尚未设置图片。
+Image attachment was not found for the requested document field.,未找到属于指定单据图片字段的附件，请核对附件关联。
+The supplied file does not match the image in the requested document field.,提供的文件与指定单据图片字段中的图片不一致。
+Both DocType and document name are required for a document image.,查看单据图片时，必须同时指定单据类型和单据编号。

@@ -94,6 +94,10 @@ def _heartbeat_stream(chunks, interval: float = _HEARTBEAT_SECONDS):
 _TOOL_HISTORY_KEEP = 6
 _TOOL_HISTORY_LIMIT = 2000
 _TOOL_HISTORY_KEEP_LIMIT = 4000
+# These tools return a complete business document by contract. Truncating their
+# JSON changes the data the model is asked to summarize, so preserve the result
+# while keeping the normal budget for exploratory and legacy tools.
+_COMPLETE_TOOL_HISTORY_NAMES = frozenset({"query_sales_order_details"})
 _DESCRIBE_FIELD_CAP = 28
 _DESCRIBE_KEEP_FIELDS = {
 	"name",
@@ -188,6 +192,13 @@ def _compact_tool_history(messages: Any) -> Any:
 	"""Old tool payloads bloat the prompt until the SSE fetch dies before the first token."""
 	if not isinstance(messages, list):
 		return messages
+	tool_names = {
+		call.get("id"): (call.get("function") or {}).get("name")
+		for message in messages
+		if isinstance(message, dict) and message.get("role") == "assistant"
+		for call in (message.get("tool_calls") or [])
+		if isinstance(call, dict) and call.get("id")
+	}
 	tool_idxs = [
 		i
 		for i, message in enumerate(messages)
@@ -201,6 +212,9 @@ def _compact_tool_history(messages: Any) -> Any:
 			continue
 		content = message.get("content") or ""
 		if not isinstance(content, str):
+			out.append(message)
+			continue
+		if tool_names.get(message.get("tool_call_id")) in _COMPLETE_TOOL_HISTORY_NAMES:
 			out.append(message)
 			continue
 		slim = _slim_describe_json(content)
@@ -504,7 +518,14 @@ def _markdown_from_show_image(result: Any) -> str:
 		return ""
 	markdown = (data.get("markdown") or "").strip()
 	if markdown:
-		return markdown
+		match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", markdown)
+		if not match:
+			return markdown
+		alt, url = match.groups()
+		alt = alt.strip() or "image"
+		if not alt.startswith("flowimg:"):
+			alt = f"flowimg:{alt}"
+		return f"![{alt}]({url})"
 	url = (data.get("url") or "").strip()
 	if not url:
 		return ""
@@ -530,10 +551,21 @@ def _append_image_markdown(messages: list[Any] | None, markdown: str) -> None:
 		return
 
 
+def _persist_show_image_markdowns(messages: list[Any] | None, markdowns: list[str]) -> None:
+	"""Persist trusted show_image previews in the transcript that Flow stores."""
+	for markdown in markdowns:
+		_append_image_markdown(messages, markdown)
+
+
 def install_show_image_inject() -> None:
-	"""After show_image runs, stream the markdown so the panel renders the picture."""
+	"""Stream show_image previews and persist them when the run is complete.
+
+	The browser guard adds the preview to the live response after each tool event.
+	Only the final RunResult is changed here, so tool-call and tool-result ordering
+	stays valid while FlowSession can persist the preview for later reloads.
+	"""
 	try:
-		from flow.lib.agent import Agent, TextChunk, ToolEnded
+		from flow.lib.agent import Agent, Done, TextChunk, ToolEnded
 	except Exception:
 		return
 	if getattr(Agent._loop_stream, "_flow_show_image", False):
@@ -541,18 +573,19 @@ def install_show_image_inject() -> None:
 	original = Agent._loop_stream
 
 	def _loop_stream(self, messages, executed_calls=None):
+		image_markdowns: list[str] = []
 		for event in original(self, messages, executed_calls):
 			if isinstance(event, TextChunk) and event.text:
 				cleaned = _strip_model_images(event.text)
 				if cleaned != event.text:
 					event = TextChunk(text=cleaned)
+			if isinstance(event, ToolEnded) and event.name == "show_image":
+				markdown = _markdown_from_show_image(event.result)
+				if markdown:
+					image_markdowns.append(markdown)
+			elif isinstance(event, Done):
+				_persist_show_image_markdowns(event.result.messages, image_markdowns)
 			yield event
-			if not isinstance(event, ToolEnded) or event.name != "show_image":
-				continue
-			markdown = _markdown_from_show_image(event.result)
-			if not markdown:
-				continue
-			_append_image_markdown(messages, markdown)
 
 	_loop_stream._flow_show_image = True
 	Agent._loop_stream = _loop_stream

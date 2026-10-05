@@ -7,6 +7,19 @@ import frappe
 
 ASSISTANT_AGENT_TITLE = "Flow"
 ASSISTANT_MAX_ITERATIONS = 40
+ASSISTANT_ROUTING_MARKER = "日常业务工具优先规则："
+ASSISTANT_ROUTING_HINT = ASSISTANT_ROUTING_MARKER + (
+	"客户、销售订单、出库、物流、PayPal、采购和开票等已知业务，先调用已经提供的专用 Imported 工具；"
+	"已知业务对象不要先用 find_doctypes、describe 或通用 read 探索子表，也不要调用 execute、create、update、delete 绕过专用流程。"
+	"查看销售订单、最新订单或订单明细时，优先调用 query_sales_order_details，一次读取完整商品行和收款摘要；"
+	"销售订单查询不要改用出库、发票或物流工具。只有没有对应专用工具、用户明确要求通用系统查询，或专用工具明确说明不支持时，才使用通用工具。"
+	"专用流程按工具返回的预检/候选、一次完整审核和一次批准执行；不要把一个业务动作拆成多次通用写入或重复确认。"
+	"客服业务总顺序固定为：客户档案→客户贴纸物料（有定制才建）→客户在外部付款并确认需求→销售订单草稿→订单提交→用真实 PayPal 交易号登记到该订单→贴纸实际生产到货入库→按订单和收款选择出库→出库单提交→创建对应物流运单→实际交给物流后标记发货。当前 PayPal 专用工具要求已提交销售订单，不能用通用写入伪造无订单预收款；若以后新增其他预收方式，必须有明确的客户和可核对凭证。"
+	"客户已经存在时复用精确客户档案；同一贴纸版本复购不再重复收取或记录定制服务成本，订单只记录商品销售，贴纸作为已确认的配套库存。"
+	"贴纸生产计划、采购订单或服务费用不是库存；没有实际到货不得提前增加贴纸库存。库存不足可以先保留销售订单，但出库单预检和提交必须停止并说明缺口，不能删除贴纸、改成其他贴纸、减少数量或用通用写入绕过。"
+	"贴纸实际到货时按合格实收数量办理采购收货；零成本仅在用户明确该批成本已由已有费用凭证承担时允许，并关联说明，不得把未知成本猜成0，也不得重复计费。"
+	"所有阶段都必须返回当前动作、目标单据、成功或失败原因和下一步。创建草稿不等于提交，提交不等于实际发货，生成物流单号也不等于包裹已交给物流。\n\n"
+)
 
 ASSISTANT_INSTRUCTIONS = (
 	"You are a Frappe assistant operating a live Frappe site through tools. Everything in Frappe "
@@ -58,7 +71,8 @@ ASSISTANT_INSTRUCTIONS = (
 	"STYLE: before each tool call, write one short sentence on what you're doing and why — never call a "
 	"tool silently; if a result changes your plan, say so. When you need a decision or detail you "
 	"cannot discover, end with a short plain-text question and stop. When the task is done, reply in "
-	"plain text."
+	"plain text.\n\n"
+	+ ASSISTANT_ROUTING_HINT
 )
 
 

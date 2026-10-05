@@ -228,7 +228,9 @@ async function switchSession(name) {
 				current.parts.push(makeToolPart(t.id, t.function.name, t.function.arguments));
 			}
 		} else if (m.role === "tool" && current) {
+			const part = current.parts.find((p) => p.type === "tool" && p.id === m.tool_call_id);
 			setToolResult(current, m.tool_call_id, m.content);
+			appendPersistedShowImage(current, part, m.content);
 		}
 	}
 
@@ -447,6 +449,25 @@ function setToolResult(msg, id, result) {
 	// a {status: "denied"} payload isn't mislabeled.
 	if (part.approval === null && toolApproval.value[part.name] === true)
 		part.approval = approvalFromResult(result);
+}
+
+// Older sessions persisted show_image's preview markdown without the trusted
+// flowimg: alt marker. Rebuild only that tool's image on history reload; model
+// authored images remain hidden by MarkdownText's safety filter.
+function appendPersistedShowImage(msg, part, result) {
+	if (!part || part.name !== "show_image" || typeof result !== "string") return;
+	let data;
+	try {
+		data = JSON.parse(result);
+	} catch {
+		return;
+	}
+	if (!data || typeof data !== "object" || !data.url) return;
+	let alt = String(data.alt || "image").trim() || "image";
+	if (!alt.startsWith("flowimg:")) alt = `flowimg:${alt}`;
+	const markdown = `![${alt}](${data.url})`;
+	if (msg.parts.some((item) => item.type === "text" && item.text.includes(markdown))) return;
+	msg.parts.push(makeTextPart(markdown));
 }
 
 // A denied/redirected confirmation persists a known status payload as its tool result.

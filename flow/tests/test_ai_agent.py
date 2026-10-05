@@ -691,6 +691,7 @@ class TestAgentConfirmation(UnitTestCase):
 
 		self.assertIn("Send email to alice@example.com", result.questions[0].prompt)
 		self.assertNotIn("body", result.questions[0].prompt)  # raw JSON shape isn't leaking through
+		self.assertTrue(result.questions[0].show_prompt)
 
 	def test_free_text_answer_redirects_to_llm_with_feedback(self):
 		write_file, calls = self._danger_tool()

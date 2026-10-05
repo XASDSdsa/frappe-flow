@@ -22,6 +22,16 @@ assert.equal(h.values['--flow-mobile-viewport-top'], '90px');
 h.viewport.height = 780; h.viewport.offsetTop = 0; h.fire('v:resize');
 assert.equal(h.values['--flow-mobile-viewport-height'], '780px');
 assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
+// A tablet's visible area must not be capped by a smaller layout viewport.
+h.window.innerHeight = 910; h.viewport.height = 1000; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+// A real obstruction still reduces the panel, then disappears without a gap.
+h.viewport.height = 550; h.viewport.offsetTop = 60; h.fire('v:resize');
+assert.equal(h.values['--flow-mobile-viewport-height'], '550px');
+assert.equal(h.values['--flow-mobile-viewport-top'], '60px');
+h.viewport.height = 1000; h.viewport.offsetTop = 0; h.fire('d:focusout');
+assert.equal(h.values['--flow-mobile-viewport-height'], '1000px');
+assert.equal(h.values['--flow-mobile-viewport-top'], '0px');
 h.window.innerHeight = 430; h.viewport.height = 430; h.fire('w:orientationchange');
 assert.equal(h.values['--flow-mobile-viewport-height'], '430px');
 h.viewport.scale = 2; h.viewport.height = 215; h.fire('v:resize');

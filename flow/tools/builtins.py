@@ -35,10 +35,22 @@ def _summarize_values(values: dict) -> str:
 
 @tool
 def find_doctypes(search: str | None = None, module: str | None = None, limit: int = 40) -> list[dict]:
-	"""Find exact DocType names before describe/read — never guess names.
+	"""Find exact, readable DocType names before using describe or read.
 
-	Search by keyword (substring of the name) and/or filter by module. Returns a list
-	of {name, module} you can read. Child tables are excluded; single DocTypes are included.
+	### Parameters and defaults
+
+	- `search`: optional keyword matched as a substring of the DocType name.
+	- `module`: optional module filter; can be combined with `search`.
+	- `limit`: defaults to 40, capped at 200.
+
+	### Results and next steps
+
+	- Returns a list of `{name, module}` entries the user can read.
+	- Use the exact returned name for `describe` or `read`; never guess names.
+
+	### Limits
+
+	- Excludes child tables; includes single DocTypes.
 	"""
 	limit = min(max(int(limit), 1), MAX_READ_LIMIT)
 	filters: dict[str, Any] = {"istable": 0}
@@ -52,7 +64,18 @@ def find_doctypes(search: str | None = None, module: str | None = None, limit: i
 
 @tool
 def describe(doctype: str, name: str | None = None) -> dict[str, Any]:
-	"""Inspect a DocType's fields and your permissions. Pass `name` to also get a record's available actions."""
+	"""Inspect a DocType's fields, the user's permissions, and optional record actions.
+
+	### Parameters and defaults
+
+	- `doctype`: the exact DocType to inspect.
+	- `name`: optional record name; include it to inspect that record's available actions.
+
+	### Results and next steps
+
+	- Returns DocType fields and permissions.
+	- With `name`, also returns the record's name, document status, and available actions.
+	"""
 	if not frappe.has_permission(doctype, "read"):
 		raise PermissionError(f"No permission to read {doctype}")
 
@@ -89,10 +112,19 @@ def read(
 	limit: int = 20,
 	order_by: str | None = None,
 ) -> list[dict]:
-	"""Read records from a DocType, honouring the user's permissions.
+	"""Read matching DocType records while honouring the user's permissions.
 
-	`filters` is a dict like {"status": "Open"} or {"qty": [">", 5]}. `fields` defaults
-	to the record name. Returns a list of matching records (capped at 200).
+	### Parameters and defaults
+
+	- `doctype`: the exact DocType to read.
+	- `filters`: optional dictionary, such as `{"status": "Open"}` or `{"qty": [">", 5]}`.
+	- `fields`: defaults to the record name.
+	- `limit`: defaults to 20, capped at 200.
+	- `order_by`: optional record ordering.
+
+	### Results and next steps
+
+	- Returns a list of matching records visible to the user.
 	"""
 	limit = min(max(int(limit), 1), MAX_READ_LIMIT)
 	return frappe.get_list(
@@ -106,11 +138,23 @@ def read(
 
 KNOWLEDGE_SEARCH_SLUG = "search_knowledge"
 
-_KNOWLEDGE_SEARCH_DESCRIPTION = """Search this agent's knowledge bases for passages relevant to `query`.
+_KNOWLEDGE_SEARCH_DESCRIPTION = """Search this agent's knowledge bases for passages relevant to the query.
 
-Use this to ground answers in the agent's curated knowledge before relying on your own. Returns the \
-most relevant chunks, each with its text, similarity score, and source. The knowledge bases searched \
-are fixed by the agent's configuration — you cannot choose, add, or widen them."""
+### Usage
+
+- Ground answers in the agent's curated knowledge before relying on your own.
+
+### Parameters and defaults
+
+- `query`: the question or topic to search for.
+
+### Results and next steps
+
+- Returns the most relevant chunks, each with its text, similarity score, and source.
+
+### Limits
+
+- The agent's configuration fixes which knowledge bases are searched; you cannot choose, add, or widen them."""
 
 
 def bind_search_knowledge(kbs: list[str]) -> Tool:
@@ -145,31 +189,31 @@ def _knowledge_search_description(kbs: list[str]) -> str:
 search_knowledge = bind_search_knowledge([])
 
 
-_UPDATE_MEMORY_DESCRIPTION = """Save a durable fact to persistent memory, or edit one by passing its memory_id.
+_UPDATE_MEMORY_DESCRIPTION = """Save a durable fact to persistent memory, or revise an existing memory.
 
-Saved memories appear in the <agent_memory> block of your system prompt on every turn, \
-including future conversations.
+### Usage
 
-When to save: stable, reusable facts learned during the conversation — mappings and \
-identifiers (e.g. an invoice item name to its ERP item code), business rules, corrections \
-the user gives you, and their preferences. Do not save transient conversation state, \
-secrets or credentials, or anything you can re-derive by reading records.
+- Save stable, reusable facts learned during the conversation: mappings and identifiers, business rules, user corrections, and preferences.
+- A mapping can link an invoice item name to its ERP item code.
+- Check `<agent_memory>` before adding. If a related memory exists, revise or extend it with `memory_id` instead of adding a duplicate.
+- When a fact changes, edit the existing memory to the new value. Near the memory limit, consolidate related memories into one.
 
-How to write: one short, self-contained, third-person fact per memory. Before adding, \
-check <agent_memory> — if a related memory exists, pass its memory_id to revise or extend \
-it instead of adding a duplicate. When a fact changes, edit the existing memory to the new \
-value. Near the memory limit, consolidate related memories into one.
+### Parameters and defaults
 
-scope:
-- "agent" — true for everyone who uses this agent (mappings, business rules, conventions).
-- "user" — specific to the current user (their preferences and defaults).
-Ask: is this about the organisation, or about this person?
+- `content`: one short, self-contained, third-person fact per memory.
+- `memory_id`: pass the existing memory's ID to revise or extend it.
+- `scope="agent"`: facts true for everyone using this agent, such as mappings, business rules, and conventions.
+- `scope="user"`: facts specific to the current user, such as preferences and defaults. Choose scope by asking whether the fact concerns the organisation or this person.
+- `keywords`: optional space-separated retrieval terms, such as synonyms, alternate names, codes, or words a user would ask with. For stationery tax, for example: `pens paper pencils office supplies GST`.
+- Add keywords when the fact's wording differs from how it will be asked about; keywords are only for retrieval and never shown as part of the fact.
 
-keywords: optional space-separated search terms that help this memory resurface later — \
-synonyms, alternate names, codes, or the words a user would ask with (e.g. for a fact about \
-stationery tax: "pens paper pencils office supplies GST"). They are used only for retrieval, \
-never shown as part of the fact. Add them when the fact's wording differs from how it will be \
-asked about."""
+### Results and next steps
+
+- Saved memories appear in the system prompt's `<agent_memory>` block on every turn, including future conversations.
+
+### Limits
+
+- Do not save transient conversation state, secrets, credentials, or facts you can re-derive by reading records."""
 
 
 def bind_update_memory(agent: str | None) -> Tool:
@@ -204,38 +248,38 @@ update_memory = bind_update_memory(None)
 def execute(code: str, description: str) -> Any:
 	"""Run Python in a permission-respecting sandbox for computation, emails, or multi-record work.
 
-	`description` is one short, plain-English sentence stating what this code does, for a
-	non-technical user who approves it — e.g. "Count open ToDos". Describe the intent, not the code.
+	### Usage
 
-	Do NOT write `import` statements — imports are blocked and the whole script fails. `frappe`
-	and `frappe.utils` are already in scope; everything you can use is listed below, so never
-	start with `import ...`.
+	- The user approves each call before it runs. Every function enforces the current user's permissions; data the user cannot access cannot be read or written.
+	- `frappe` and `frappe.utils` are already in scope. Only the functions listed here are available; do not start with an import.
+	- Reads: `frappe.get_list`, `frappe.get_doc` (returns a dictionary), `frappe.get_meta`, and `frappe.db.get_value`, `get_single_value`, `count`, `exists`.
+	- `frappe.get_list` supports `group_by` and aggregates via dictionary fields, such as `fields=[{"SUM": "qty", "as": "total"}]` or `fields=[{"COUNT": "*", "as": "n"}]`.
+	- Writes: `create`, `update`, `delete`, `run_action`, using the same permission checks as direct tool calls.
+	- Also available: `read`, `describe`, `find_doctypes`, `frappe.call` (whitelisted methods), `frappe.enqueue`, `frappe.sendmail`, `frappe.get_print`, and `frappe.utils.*` (dates, numbers, strings).
 
-	Every function here enforces the current user's permissions — there is no way to read or
-	write data the user cannot access. Assign the value to return to a variable named `result`.
-	Example (no imports, just use `frappe` directly):
-	    result = frappe.db.count("ToDo", {"status": "Open"})
+	### Parameters and defaults
 
-	Available:
-	- Reads: frappe.get_list (supports group_by and aggregates via dict fields, e.g.
-	  fields=[{"SUM": "qty", "as": "total"}] or [{"COUNT": "*", "as": "n"}]),
-	  frappe.get_doc (returns a dict), frappe.get_meta, frappe.db.get_value/get_single_value/count/exists.
-	- Writes: create, update, delete, run_action — the same permission-checked tools you call directly.
-	- Also: read, describe, find_doctypes, frappe.call (whitelisted methods), frappe.enqueue,
-	  frappe.sendmail, frappe.get_print, frappe.utils.* (dates, numbers, strings).
+	- `code`: Python code using the available sandbox functions.
+	- `description`: one short, plain-English sentence explaining the intent to the non-technical user approving it, such as "Count open ToDos". Describe the intent, not the code.
 
-	Sandbox limits — code using these FAILS:
-	- No `import`. `frappe` and `frappe.utils` are already in scope; nothing else can be imported.
-	- No names or attributes starting with `_` (no dunders, no `obj._private`).
-	- No raw database access: frappe.db.sql, frappe.qb, frappe.db.set_value and frappe.get_all are
-	  unavailable — use frappe.get_list and the write tools, which respect permissions.
-	- Unavailable builtins: open, eval, exec, compile, getattr, setattr, hasattr,
-	  globals, locals, vars, dir, type, input. Available: len, range, str, int, float,
-	  bool, sum, sorted, enumerate, zip, min, max, abs, dict, list, set, tuple.
-	- `str.format()` / `.format_map()` are blocked — use f-strings or `%` formatting.
-	- `print()` output is logged, not returned — put what you want back into `result`.
+	### Results and next steps
 
-	The user approves each call before it runs.
+	- Assign the value to return to a variable named `result`.
+	- `print()` output is logged, not returned.
+	- Example without imports:
+
+	```python
+	result = frappe.db.count("ToDo", {"status": "Open"})
+	```
+
+	### Limits
+
+	- Code using blocked features fails; an `import` statement fails the whole script. Nothing else can be imported.
+	- No names or attributes starting with `_`: no dunders or `obj._private`.
+	- No raw database access: `frappe.db.sql`, `frappe.qb`, `frappe.db.set_value`, and `frappe.get_all` are unavailable. Use `frappe.get_list` and the permission-checked write tools.
+	- Unavailable builtins: `open`, `eval`, `exec`, `compile`, `getattr`, `setattr`, `hasattr`, `globals`, `locals`, `vars`, `dir`, `type`, `input`.
+	- Available builtins: `len`, `range`, `str`, `int`, `float`, `bool`, `sum`, `sorted`, `enumerate`, `zip`, `min`, `max`, `abs`, `dict`, `list`, `set`, `tuple`.
+	- `str.format()` and `.format_map()` are blocked; use f-strings or `%` formatting.
 	"""
 	exec_globals, _locals = safe_exec(code, script_filename="ai_execute")
 	return exec_globals.get("result")
@@ -342,7 +386,17 @@ def _apply_action(doctype: str, name: str, action: str, args: dict[str, Any]) ->
 	),
 )
 def create(doctype: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-	"""Create one or more records. `records` is a list of field-value dicts, each validated and inserted."""
+	"""Create one or more records, validating each record before insertion.
+
+	### Parameters and defaults
+
+	- `doctype`: the exact DocType to create.
+	- `records`: a list of field-value dictionaries, each validated and inserted.
+
+	### Results and next steps
+
+	- Returns created record names and any per-row failures.
+	"""
 	if not frappe.has_permission(doctype, "create"):
 		raise PermissionError(f"No permission to create {doctype}")
 
@@ -375,7 +429,18 @@ def create(doctype: str, records: list[dict[str, Any]]) -> dict[str, Any]:
 	),
 )
 def update(doctype: str, names: list[str], values: dict[str, Any]) -> dict[str, Any]:
-	"""Apply the same field values to one or more existing records. Runs full validation per record."""
+	"""Apply the same field values to one or more existing records with full validation.
+
+	### Parameters and defaults
+
+	- `doctype`: the exact DocType to update.
+	- `names`: the existing record names to update.
+	- `values`: field values applied to every selected record.
+
+	### Results and next steps
+
+	- Runs full validation per record and returns updated names and any per-record failures.
+	"""
 	updated: list[str] = []
 	failures: list[dict[str, Any]] = []
 	for name in names:
@@ -406,7 +471,21 @@ def update(doctype: str, names: list[str], values: dict[str, Any]) -> dict[str, 
 	),
 )
 def delete(doctype: str, names: list[str]) -> dict[str, Any]:
-	"""Delete one or more records. Fails per record if another record links to it."""
+	"""Delete one or more records and report per-record failures.
+
+	### Parameters and defaults
+
+	- `doctype`: the exact DocType to delete from.
+	- `names`: the record names to delete.
+
+	### Results and next steps
+
+	- Returns deleted names and any per-record failures.
+
+	### Limits
+
+	- Deletion fails for a record if another record links to it.
+	"""
 	deleted: list[str] = []
 	failures: list[dict[str, Any]] = []
 	for name in names:
@@ -441,7 +520,22 @@ def run_action(
 	action: str,
 	args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-	"""Run a document action found via describe: submit, cancel, amend, rename, a workflow transition, or a whitelisted method."""
+	"""Run a document action found via describe on the selected records.
+
+	### Parameters and defaults
+
+	- `doctype` and `names`: the target DocType and record names.
+	- `action`: `submit`, `cancel`, `amend`, `rename`, a workflow transition, or a whitelisted method found via `describe`.
+	- `args`: optional action arguments.
+
+	### Results and next steps
+
+	- Returns action results and any per-record failures; rename returns the old and new names.
+
+	### Limits
+
+	- `rename` requires exactly one name and `args.new_name`.
+	"""
 	args = args or {}
 
 	if action == "rename":

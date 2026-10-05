@@ -31,6 +31,23 @@ const summary = computed(() => {
 // A single tool call whose result is an error payload.
 const error = computed(() => (single.value ? toolError(props.parts[0].result) : null));
 
+// Preview results are persisted as tool transcript messages. Keep the trusted
+// first-order review visible in both the live run and reloaded session history.
+const stickerServiceReview = computed(() => {
+	for (let i = props.parts.length - 1; i >= 0; i--) {
+		const part = props.parts[i];
+		if (part.name !== "preview_sales_order") continue;
+		if (typeof part.result !== "string") return null;
+		try {
+			const result = JSON.parse(part.result);
+			return result?.sticker_service_review?.message ? result.sticker_service_review : null;
+		} catch {
+			return null;
+		}
+	}
+	return null;
+});
+
 // Only set on a resolved approval or failed line.
 const status = computed(() => {
 	if (error.value) return __("Failed");
@@ -70,6 +87,18 @@ function toggle() {
 				:class="{ 'rotate-90': open }"
 			/>
 		</button>
+
+		<div
+			v-if="stickerServiceReview"
+			class="mt-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5"
+		>
+			<div class="text-sm font-medium leading-snug text-ink-gray-9">
+				⚠️ {{ stickerServiceReview.title }}
+			</div>
+			<div class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-ink-gray-8">
+				{{ stickerServiceReview.message }}
+			</div>
+		</div>
 
 		<Transition name="flow-reveal">
 			<!-- The open call's content sits in a bordered card so it can't bleed into
