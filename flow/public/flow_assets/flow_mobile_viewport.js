@@ -24,7 +24,7 @@
 		style.setProperty("--flow-mobile-viewport-height", `${height}px`);
 	};
 	const schedule = () => {
-		if (!frame) frame = requestAnimationFrame(update);
+		if (!frame) frame = requestAnimationFrame(() => update());
 	};
 	const recoverAfterKeyboard = (event) => {
 		const target = event?.target;

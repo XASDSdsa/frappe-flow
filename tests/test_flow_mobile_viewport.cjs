@@ -11,7 +11,7 @@ function harness(withViewport = true) {
   const document = Object.assign(target('d:'), {documentElement: {style: {setProperty: (k, v) => {values[k] = v;}}}});
   const context = vm.createContext({window, document, requestAnimationFrame: fn => (frames.push(fn), frames.length), setTimeout: (fn, delay) => (timers.push({fn, delay}), timers.length), clearTimeout: id => { if (timers[id - 1]) timers[id - 1].fn = null; }, Math, Number});
   vm.runInContext(source, context);
-  const fire = (key, event = {}) => {listeners[key](event); while(frames.length) frames.shift()();};
+  const fire = (key, event = {}) => {listeners[key](event); while(frames.length) frames.shift()(123.4);};
   const flushTimers = () => { while (timers.length) { const timer = timers.shift(); if (timer.fn) timer.fn(); } };
   return {viewport, window, values, fire, flushTimers, timers, context};
 }
