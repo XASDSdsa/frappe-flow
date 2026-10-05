@@ -833,18 +833,26 @@ def _confirmation_prompt(args):
                 continue
             if heading:
                 lines.extend(["", heading])
+            lines.extend(["| 名称 | 数量 | 单价 | 小计 |", "| --- | --- | --- | --- |"])
             for row in rows:
-                unit = ("张" if kind in {"sticker", "standalone_sticker"} else "颗" if row['item_code'].startswith('SD-') else "件") if row['uom'] == 'Nos' else row['uom']
-                price = f"免费，金额 {summary['currency']} 0.00" if row['is_free_item'] else f"单价 {summary['currency']} {row['rate']:g}，小计 {row['amount']:.2f}"
-                detail = ""
+                unit = row["uom"] if row["uom"] != "Nos" else (
+                    "张" if kind in {"sticker", "standalone_sticker"} else "颗" if row["item_code"].startswith("SD-") else "件")
+                label = row["item_name"]
                 if kind == "bundle":
-                    detail = ("；复用已有组合" if bundle_actions.get(row["item_code"]) == "reuse" else "；批准后新建组合") + f"；贴 {row['sticker_item_name']}，{row['stock_qty']:g}张，贴纸0元"
-                if kind in {"sticker", "standalone_sticker"}:
+                    action = "复用已有组合" if bundle_actions.get(row["item_code"]) == "reuse" else "批准后新建组合"
+                    label = f"{row['item_name']}（{action}；贴 {row['sticker_item_name']} {row['stock_qty']:g}张，贴纸0元）"
+                elif kind in {"sticker", "standalone_sticker"}:
+                    notes = []
                     identity = "/".join(str(row.get(key)) for key in ("sticker_model", "sticker_version") if row.get(key))
-                    detail = ("；型号版本 " + identity) if identity else ""
+                    if identity:
+                        notes.append(identity)
                     if row.get("product_item_code"):
-                        detail += "；对应商品 " + row["product_item_code"]
-                lines.append(f"• {row['item_name']}：{row['qty']:g}{unit}；{price}{detail}")
+                        notes.append("对应商品 " + row["product_item_code"])
+                    if notes:
+                        label = row["item_name"] + "（" + "；".join(notes) + "）"
+                price = "免费" if row["is_free_item"] else f"{summary['currency']} {row['rate']:.2f}"
+                cells = [label, f"{row['qty']:g} {unit}", price, f"{summary['currency']} {row['amount']:.2f}"]
+                lines.append("| " + " | ".join(cell.replace("|", "｜").replace("\n", " ") for cell in cells) + " |")
         if plan.get("bundles"):
             lines.append("组合按已审核搭配复用或新建；出库分别扣巧克粉与贴纸库存。")
         warehouses = list(dict.fromkeys(r['warehouse'] for r in summary['items'] if r['warehouse']))

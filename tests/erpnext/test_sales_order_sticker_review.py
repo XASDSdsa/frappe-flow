@@ -103,8 +103,8 @@ def test_confirmed_service_is_in_review_and_not_in_goods_totals(flow, rate):
     module._load_plan = lambda _token: {"summary": summary}
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
     assert "【服务（免费也保留）】" in card
-    assert "CUSTOM-SERVICE：1件" in card
-    assert ("免费，金额 USD 0.00" if rate == 0 else "单价 USD 100") in card
+    assert "| CUSTOM-SERVICE | 1 件 |" in card
+    assert ("| 免费 | USD 0.00 |" if rate == 0 else "| USD 100.00 |") in card
     # Saved native rows retain service classification by persisted child-row identity.
     sources = {row.name: source for row, source in zip(rows, resolved["items"], strict=True)}
     saved = module._summary(native_order(list(reversed(rows))), resolved, existing=True, row_sources=sources)
@@ -132,8 +132,8 @@ def test_approval_card_separates_both_sticker_kinds_and_shows_warning_from_trust
     card = module._confirmation_prompt({"preview_token": "trusted-token"})
     assert card.index("⚠️ **重点审核：独立销售贴纸**") < card.index("【商品】")
     assert "【配套贴纸】" in card and "【独立销售贴纸】" in card
-    assert "STICKER：1000张；单价 USD 0.1，小计 100.00；型号版本 Green/v1" in card
-    assert "STICKER：120张；免费，金额 USD 0.00；型号版本 Green/v1；对应商品 GREEN" in card
+    assert "| STICKER（Green/v1） | 1000 张 | USD 0.10 | USD 100.00 |" in card
+    assert "| STICKER（Green/v1；对应商品 GREEN） | 120 张 | 免费 | USD 0.00 |" in card
     assert "无需另行确认" in card
 
 

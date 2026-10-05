@@ -36,9 +36,33 @@ const displayArgs = computed(() => {
 const showArgs = computed(() => !body.value && Boolean(props.tool) && hasArgs(displayArgs.value));
 const blockKeys = computed(() => blockKeysFor(props.tool?.name));
 const answered = computed(() => props.question._answer !== undefined);
-const bodyLines = computed(() =>
-	body.value.split("\n").map((text) => ({ text: text.replaceAll("**", ""), role: lineRole(text) }))
-);
+const bodyBlocks = computed(() => blocks(body.value));
+
+function blocks(text) {
+	const lines = text.split("\n");
+	const result = [];
+	let index = 0;
+	while (index < lines.length) {
+		if (lines[index].trim().startsWith("|")) {
+			const rows = [];
+			while (index < lines.length && lines[index].trim().startsWith("|")) {
+				const cells = lines[index]
+					.trim()
+					.replace(/^\|/, "")
+					.replace(/\|$/, "")
+					.split("|")
+					.map((cell) => cell.replaceAll("**", "").trim());
+				if (!cells.every((cell) => /^:?-+:?$/.test(cell))) rows.push(cells);
+				index += 1;
+			}
+			if (rows.length) result.push({ type: "table", header: rows[0], rows: rows.slice(1) });
+			continue;
+		}
+		result.push({ type: "line", text: lines[index].replaceAll("**", ""), role: lineRole(lines[index]) });
+		index += 1;
+	}
+	return result;
+}
 
 function lineRole(text) {
 	const line = text.replaceAll("**", "").trim();
@@ -96,7 +120,33 @@ function sendOther() {
 			<ArgsView :arguments="displayArgs" :block-keys="blockKeys" />
 		</div>
 		<div v-else-if="body" class="flow-confirm-body">
-			<p v-for="(line, index) in bodyLines" :key="index" :class="line.role">{{ line.text }}</p>
+			<template v-for="(block, index) in bodyBlocks" :key="index">
+				<table v-if="block.type === 'table'" class="flow-confirm-table">
+					<thead>
+						<tr>
+							<th
+								v-for="(cell, cellIndex) in block.header"
+								:key="cellIndex"
+								:class="{ num: cellIndex > 0 }"
+							>
+								{{ cell }}
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="(row, rowIndex) in block.rows" :key="rowIndex">
+							<td
+								v-for="(cell, cellIndex) in row"
+								:key="cellIndex"
+								:class="cellIndex === 0 ? 'name' : cellIndex === row.length - 1 ? 'num money' : 'num'"
+							>
+								{{ cell }}
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<p v-else :class="block.role">{{ block.text }}</p>
+			</template>
 		</div>
 
 		<div
@@ -164,8 +214,42 @@ function sendOther() {
 	border: 1px solid var(--outline-gray-1);
 	border-radius: 6px;
 	font-family: inherit;
-	white-space: pre-wrap;
 	word-break: break-word;
+}
+.flow-confirm-table {
+	width: 100%;
+	margin-top: 6px;
+	border-collapse: collapse;
+	table-layout: fixed;
+}
+.flow-confirm-table th {
+	padding: 0 6px 4px 0;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--flow-meta, var(--ink-gray-5));
+	text-align: left;
+}
+.flow-confirm-table td {
+	padding: 6px 6px 6px 0;
+	border-top: 1px solid var(--outline-gray-2);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.45;
+	color: var(--flow-body, var(--ink-gray-8));
+	vertical-align: top;
+}
+.flow-confirm-table .name {
+	width: 46%;
+}
+.flow-confirm-table .num {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	white-space: nowrap;
+}
+.flow-confirm-table td.money {
+	font-weight: 500;
+	color: var(--flow-title, var(--ink-gray-9));
 }
 .flow-confirm-body p {
 	margin: 0;
