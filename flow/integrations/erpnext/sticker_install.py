@@ -3,6 +3,7 @@
 import frappe
 
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
+from flow.integrations.erpnext.tool_install import upsert_imported_tools
 from .image_guidance import SHOW_IMAGE_HINT, SHOW_IMAGE_HINT_EXPLICIT_ONLY
 
 TOOL_SLUG = "create_customer_sticker_variant"
@@ -86,24 +87,12 @@ TOOL_DESCRIPTION = """按客户、贴纸型号和贴纸版本创建巧克粉贴�
 
 def install_sticker_tool(enable=False):
 	"""Deploy implementation; explicit enable also adds the two chat entry points."""
-	if not frappe.db.exists("DocType", "Flow Tool"):
-		frappe.throw("Flow 尚未安装")
-	values = {
-		"type": "Imported", "import_path": TOOL_IMPORT_PATH, "code": None,
-		"title": "创建巧克粉贴纸变体", "requires_confirmation": 1,
+	name = upsert_imported_tools([{
+		"slug": TOOL_SLUG, "import_path": TOOL_IMPORT_PATH,
+		"title": "创建巧克粉贴纸变体", "requires_confirmation": True,
 		"description": TOOL_DESCRIPTION,
 		"summary": "客户＋型号＋版本＋图片，一次批准完成建档和图片登记，完成后直接展示图片核对。",
-	}
-	if enable:
-		values["enabled"] = 1
-	name = frappe.db.get_value("Flow Tool", {"slug": TOOL_SLUG}, "name")
-	if name:
-		frappe.db.set_value("Flow Tool", name, values)
-	else:
-		doc = frappe.get_doc({"doctype": "Flow Tool", "slug": TOOL_SLUG, "enabled": int(enable), **values})
-		doc.insert(ignore_permissions=True)
-		name = doc.name
-	frappe.clear_document_cache("Flow Tool", name)
+	}], enable=enable)[0]
 	agents = []
 	for agent_name in frappe.get_all("Flow Agent", pluck="name"):
 		agent = frappe.get_doc("Flow Agent", agent_name)

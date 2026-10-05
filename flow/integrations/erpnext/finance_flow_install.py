@@ -4,6 +4,7 @@ import inspect
 
 import frappe
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style, without_managed_guidance
+from flow.integrations.erpnext.tool_install import all_enabled, bind_imported_tools, upsert_imported_tools
 
 MODULES = ('purchase_order_flow', 'purchase_receipt_flow', 'sales_invoice_flow')
 HINT_MARKER = '采购开票工具规则：'
@@ -64,33 +65,6 @@ def tool_definitions():
 def install_finance_tools(enable=False):
     if not frappe.db.exists('DocType', 'Flow Tool'):
         return {'installed': False, 'reason': 'Flow 尚未安装'}
-    installed = []
-    for definition in tool_definitions():
-        slug = definition['slug']
-        values = {**definition, 'type': 'Imported', 'code': None, 'summary': definition['title']}
-        if enable:
-            values['enabled'] = 1
-        name = frappe.db.get_value('Flow Tool', {'slug': slug}, 'name')
-        if name:
-            frappe.db.set_value('Flow Tool', name, values)
-        else:
-            doc = frappe.get_doc({'doctype': 'Flow Tool', 'enabled': int(enable), **values})
-            doc.insert(ignore_permissions=True)
-            name = doc.name
-        frappe.clear_document_cache('Flow Tool', name)
-        installed.append(name)
-    agents = []
-    if enable:
-        for title in ('Flow', '销售助理'):
-            name = frappe.db.get_value('Flow Agent', {'title': title}, 'name')
-            if not name:
-                continue
-            agent = frappe.get_doc('Flow Agent', name)
-            for name in installed:
-                if not any(row.tool == name for row in agent.get('tools') or []):
-                    agent.append('tools', {'tool': name})
-            agent.instructions = with_finance_guidance(agent.instructions)
-            agent.save(ignore_permissions=True, ignore_version=True)
-            frappe.clear_document_cache('Flow Agent', agent.name)
-            agents.append(agent.name)
-    return {'tools': installed, 'enabled': enable, 'agents': agents}
+    installed = upsert_imported_tools(tool_definitions(), enable=enable)
+    agents = bind_imported_tools(installed, enable=enable, guidance=with_finance_guidance)
+    return {'tools': installed, 'enabled': all_enabled(installed), 'agents': agents}

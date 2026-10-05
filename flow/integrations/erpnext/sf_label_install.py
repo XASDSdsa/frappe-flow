@@ -1,6 +1,9 @@
 """Register the reviewed SF-label workflow as Imported Flow tools."""
+import inspect
+
 import frappe
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
+from flow.integrations.erpnext.tool_install import all_enabled, bind_imported_tools, upsert_imported_tools
 
 HINT_MARKER = "顺丰面单专用工具规则："
 HINT = (
@@ -10,7 +13,7 @@ HINT = (
     '### 用途与入口\n'
     '\n'
     '- 从已提交的出库单创建首次顺丰面单时只使用本流程，不自动提交出库单。\n'
-    '- 旧顺丰直接写入口（包括book_sf_waybill、直接打印、直接发货、直接取消和旧重建）均已停用并解绑，旧对话也不能再次调用；先准备地址候选，再预检和整体批准create_sf_label。\n'
+    '- 旧对话里出现的直接下单、打印、发货、取消或重建入口均已停用，不能调用；创建面单先准备地址候选，再预检和整体批准create_sf_label。\n'
     '- 用户只说销售订单准备出库时，不调用本流程，也不调用顺丰状态查询；先用出库单 Imported 工具核对并创建出库单。\n'
     '\n'
     '### 准备与地址选择\n'
@@ -52,6 +55,13 @@ HINT = (
     '- needs_review说明批准后哪项变化、当前未发送请求，需核对原运单。\n'
     '- 每次只用短摘要说明当前结果、实际异常原因和下一步；完整steps保留在工具结果中，不默认逐条复述，未执行不能写成完成。\n'
     '\n'
+    '### 取消面单\n'
+    '\n'
+    '- 包裹尚未交给物流、客服明确要求取消当前顺丰面单时，问清原因后调用cancel_sf_label(shipment,reason)，一次批准。\n'
+    '- carrier_cancelled才表示顺丰已确认取消；pending或uncertain只说待核对，稍后再次调用只核对结果，不会重复提交。\n'
+    '- 取消只作用于顺丰面单，本地运单、出库单和原单号保留；需要重新下单时，在顺丰确认取消后改用preview_sf_waybill_replacement换单。\n'
+    '- 已发出或正在拦截的包裹不能用本工具，说明须联系顺丰客服拦截并在运单上记录反馈。\n'
+    '\n'
     '### 操作限制\n'
     '\n'
     '- 常规查询、准备、核对不要求批准；仅地址选择和整体批准需要客服操作，真实缺项一次补齐。\n'
@@ -59,7 +69,7 @@ HINT = (
     '\n'
     '### 当前与历史面单查询\n'
     '\n'
-    '- 查询当前或历史面单先用get_sf_shipment_status，用户给了具体顺丰单号就传waybill，并始终保留该单号。\n'
+    '- 查询当前或历史面单先用get_sf_shipment_status，可按运单、出库单、销售订单或顺丰单号定位；用户给了具体顺丰单号就传waybill，并始终保留该单号。\n'
     '- 历史换单记录必须明确标注当前面单或历史面单；只读查询物流query_sf_tracking和运费query_sf_freight继续传同一waybill，不能悄悄换成当前单号。\n'
     '- 用户未指定旧号且有多张历史面单时，展示真实候选后再选择，不能默认最新一条就是所需历史单。\n'
     '- query_sf_tracking只读返回顺丰和已保存历史，不写入；需要把最新轨迹保存回系统时才调用sync_sf_tracking并整体批准。\n'
@@ -178,6 +188,23 @@ TOOLS = (
         '- 必须确认实际交运；不重复打印、下单或请求顺丰。'
     )
     )),
+    ("cancel_sf_label", "批准取消顺丰面单", True,
+     (
+        '包裹尚未发出时，批准向顺丰取消当前面单并核对取消结果。\n'
+        '\n'
+        '### 参数与默认值\n'
+        '\n'
+        '- `shipment` 为原运单编号；`reason` 为客服给出的取消原因；`waybill` 可选，传入时必须是当前顺丰单号。\n'
+        '\n'
+        '### 返回与下一步\n'
+        '\n'
+        '- `carrier_cancelled` 表示顺丰已确认取消；需要重新下单时改用 `preview_sf_waybill_replacement` 换单。\n'
+        '- `pending`、`uncertain` 表示待核对；稍后再次调用只核对结果，不重复提交取消。\n'
+        '\n'
+        '### 限制\n'
+        '\n'
+        '- 只取消顺丰面单，不取消本地运单或出库单；已发出或正在拦截的包裹须联系顺丰客服拦截。'
+    )),
 )
 
 
@@ -186,42 +213,44 @@ def with_sf_label_guidance(instructions):
     return with_reply_style(with_managed_guidance(text, HINT_MARKER, HINT))
 
 
+def tool_definitions():
+    return [{"slug": slug, "title": title, "requires_confirmation": confirm, "description": description,
+             "summary": title, "import_path": "flow.integrations.erpnext.sf_label_flow." + slug}
+            for slug, title, confirm, description in TOOLS]
+
+
+def query_tool_definitions():
+    """SF query tools take their description and confirmation flag from the decorated function."""
+    from flow.integrations.erpnext import flow_tools
+
+    definitions = []
+    for item in flow_tools.FLOW_TOOL_OBJECTS:
+        slug = getattr(item, "name", None) or item.__name__
+        title = flow_tools.TOOL_TITLES[slug]
+        definitions.append({
+            "slug": slug, "title": title, "summary": title,
+            "requires_confirmation": bool(getattr(item, "requires_confirmation", False)),
+            "description": getattr(item, "description", None) or inspect.getdoc(item),
+            "import_path": "flow.integrations.erpnext.flow_tools." + slug,
+        })
+    return definitions
+
+
 def install_sf_label_tools(enable=False):
     """Refresh existing registrations; explicit enable activates/binds the tools."""
     if not frappe.db.exists("DocType", "Flow Tool"):
         frappe.throw("Flow 尚未安装")
     retire_legacy_booking_tool()
-    installed = []
-    for slug, title, confirm, description in TOOLS:
-        values = {"type": "Imported", "code": None, "title": title, "description": description,
-            "summary": title, "requires_confirmation": int(confirm),
-            "import_path": "flow.integrations.erpnext.sf_label_flow." + slug}
-        if enable:
-            values["enabled"] = 1
-        name = frappe.db.get_value("Flow Tool", {"slug": slug}, "name")
-        if name:
-            frappe.db.set_value("Flow Tool", name, values)
-        else:
-            doc = frappe.get_doc({"doctype": "Flow Tool", "slug": slug, "enabled": int(enable), **values})
-            doc.insert(ignore_permissions=True)
-            name = doc.name
-        frappe.clear_document_cache("Flow Tool", name)
-        installed.append(name)
-    agents = []
-    if enable and frappe.db.exists("DocType", "Flow Agent"):
-        for title in ("Flow", "销售助理"):
-            name = frappe.db.get_value("Flow Agent", {"title": title}, "name") or (title if frappe.db.exists("Flow Agent", title) else None)
-            if not name or name in agents:
-                continue
-            agent = frappe.get_doc("Flow Agent", name)
-            for tool_name in installed:
-                if not any(row.tool == tool_name for row in agent.get("tools") or []):
-                    agent.append("tools", {"tool": tool_name})
-            agent.instructions = with_sf_label_guidance(agent.get("instructions"))
-            agent.save(ignore_permissions=True, ignore_version=True)
-            frappe.clear_document_cache("Flow Agent", name)
-            agents.append(name)
-    return {"tools": installed, "type": "Imported", "enabled": all(bool(frappe.db.get_value("Flow Tool", n, "enabled")) for n in installed), "agents": agents}
+    installed = upsert_imported_tools(tool_definitions(), enable=enable)
+    agents = bind_imported_tools(installed, enable=enable, guidance=with_sf_label_guidance)
+    return {"tools": installed, "type": "Imported", "enabled": all_enabled(installed), "agents": agents}
+
+
+def install_sf_query_tools(enable=False):
+    """Register the read/sync SF query tools that the label guidance refers to."""
+    installed = upsert_imported_tools(query_tool_definitions(), enable=enable)
+    agents = bind_imported_tools(installed, enable=enable)
+    return {"tools": installed, "type": "Imported", "enabled": all_enabled(installed), "agents": agents}
 
 
 def retire_legacy_booking_tool():

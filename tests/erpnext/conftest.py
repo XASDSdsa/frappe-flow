@@ -13,6 +13,9 @@ ERP_SPEC = importlib.util.find_spec("erpnext")
 
 @pytest.fixture(autouse=True)
 def isolated_flow_packages(monkeypatch):
+	# Shared helpers bind ``frappe`` at import time; never reuse one loaded under another test's stub.
+	for name in [name for name in sys.modules if name.startswith("flow.integrations.erpnext.")]:
+		monkeypatch.delitem(sys.modules, name)
 	for name, relative in (
 		("flow", "flow"),
 		("flow.integrations", "flow/integrations"),

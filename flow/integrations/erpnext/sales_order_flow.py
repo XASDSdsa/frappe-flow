@@ -607,7 +607,7 @@ def _existing(token, steps):
     for row in steps:
         row.update(status="reused", reason="已找到本次方案对应的原销售订单，未重复创建。")
     return {"status": "existing", "verified": True, "sales_order": order.name,
-            "url": "/app/sales-order/" + quote(order.name, safe=""), "docstatus": order.docstatus,
+            "url": "/desk/sales-order/" + quote(order.name, safe=""), "docstatus": order.docstatus,
             "summary": _summary(order, data.get("resolved"), existing=True, row_sources=data.get("row_sources")), "steps": steps,
             "message": "本次方案已有订单，已返回原订单，未重复创建。"}
 
@@ -663,7 +663,7 @@ def _create_sales_order_draft(preview_token: str):
             raise OrderInputError("保存后的订单明细、价格、交期或销售团队与已批准方案不一致，本次写入已撤回。")
         _mark(steps, "verify", "completed", "已回读核对客户、全部商品和贴纸数量金额、本人销售团队100%及交货日期。")
         result = {"status": "created", "verified": True, "sales_order": saved.name, "docstatus": saved.docstatus,
-                  "url": "/app/sales-order/" + quote(saved.name, safe=""), "summary": _summary(saved, resolved),
+                  "url": "/desk/sales-order/" + quote(saved.name, safe=""), "summary": _summary(saved, resolved),
                   "steps": steps, "message": "销售订单草稿已创建并核验完成。"}
         ledger.status = "Completed"
         ledger_data = json.loads(ledger.data or "{}")

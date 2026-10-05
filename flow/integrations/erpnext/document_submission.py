@@ -123,7 +123,7 @@ def _summary(doc):
 
 
 def _url(doc):
-	return "/app/" + frappe.scrub(doc.doctype).replace("_", "-") + "/" + quote(doc.name, safe="")
+	return "/desk/" + frappe.scrub(doc.doctype).replace("_", "-") + "/" + quote(doc.name, safe="")
 
 
 def _failure(exc):

@@ -154,7 +154,7 @@ def _order_state(name, for_update=False):
     draft_links = []
     for docname in dict.fromkeys(d.name for d in drafts):
         if frappe.has_permission("Delivery Note", "read", doc=docname):
-            draft_links.append({"name": docname, "url": "/app/delivery-note/" + quote(docname, safe="")})
+            draft_links.append({"name": docname, "url": "/desk/delivery-note/" + quote(docname, safe="")})
     state = {"sales_order": name, "customer": order.customer, "customer_name": order.customer_name,
              "company": order.company, "currency": order.currency, "order_modified": str(order.modified),
              "payment": payment, "items": rows, "drafts": draft_links,
@@ -327,7 +327,7 @@ def _existing(token, steps, current=False):
     for step in steps:
         step.update(status="reused", reason="已返回本次方案对应的原出库单，未重复创建。")
     return {"status": "existing", "verified": True, "delivery_note": doc.name, "docstatus": doc.docstatus,
-            "url": "/app/delivery-note/" + quote(doc.name, safe=""), "summary": _document_summary(doc),
+            "url": "/desk/delivery-note/" + quote(doc.name, safe=""), "summary": _document_summary(doc),
             "steps": steps, "message": "本次方案已有出库单，已返回原单及其当前状态。"}
 
 
@@ -381,7 +381,7 @@ def _create_delivery_note_draft(preview_token: str):
         ledger.output = _json({"delivery_note": saved.name, "verified": True})
         ledger.save(ignore_permissions=True)
         return {"status": "created", "verified": True, "delivery_note": saved.name, "docstatus": 0,
-                "url": "/app/delivery-note/" + quote(saved.name, safe=""), "summary": summary,
+                "url": "/desk/delivery-note/" + quote(saved.name, safe=""), "summary": summary,
                 "payment": state["payment"], "steps": steps, "message": "出库单草稿已创建，尚未提交、扣库存或实际发货。"}
     except Exception as exc:
         _rollback(point)

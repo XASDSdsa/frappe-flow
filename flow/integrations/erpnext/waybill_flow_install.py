@@ -1,8 +1,7 @@
 """Register the reviewed SF replacement-waybill Flow tools."""
 
-import frappe
-
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
+from flow.integrations.erpnext.tool_install import all_enabled, bind_imported_tools, upsert_imported_tools
 
 HINT_MARKER = "顺丰换单专用工具规则："
 HINT = HINT_MARKER + (
@@ -32,36 +31,11 @@ def with_replacement_guidance(instructions):
 
 def install_waybill_replacement_tools(enable=False):
 	from .waybill_flow import TOOLS
-	if not frappe.db.exists("DocType", "Flow Tool"):
-		frappe.throw("Flow 尚未安装")
-	installed = []
-	for slug, title, confirm, description in TOOLS:
-		values = {"type": "Imported", "code": None, "title": title, "description": description,
-			"summary": title, "requires_confirmation": int(confirm),
-			"import_path": "flow.integrations.erpnext.waybill_flow." + slug}
-		if enable:
-			values["enabled"] = 1
-		name = frappe.db.get_value("Flow Tool", {"slug": slug}, "name")
-		if name:
-			frappe.db.set_value("Flow Tool", name, values)
-		else:
-			doc = frappe.get_doc({"doctype": "Flow Tool", "slug": slug, "enabled": int(enable), **values})
-			doc.insert(ignore_permissions=True)
-			name = doc.name
-		frappe.clear_document_cache("Flow Tool", name)
-		installed.append(name)
-	agents = []
-	if enable and frappe.db.exists("DocType", "Flow Agent"):
-		for title in ("Flow", "销售助理"):
-			name = frappe.db.get_value("Flow Agent", {"title": title}, "name") or (title if frappe.db.exists("Flow Agent", title) else None)
-			if not name or name in agents:
-				continue
-			agent = frappe.get_doc("Flow Agent", name)
-			for tool_name in installed:
-				if not any(row.tool == tool_name for row in agent.get("tools") or []):
-					agent.append("tools", {"tool": tool_name})
-			agent.instructions = with_replacement_guidance(agent.get("instructions"))
-			agent.save(ignore_permissions=True, ignore_version=True)
-			frappe.clear_document_cache("Flow Agent", agent.name)
-			agents.append(name)
-	return {"tools": installed, "type": "Imported", "enabled": bool(enable), "agents": agents}
+
+	installed = upsert_imported_tools([
+		{"slug": slug, "title": title, "requires_confirmation": confirm, "description": description,
+		 "summary": title, "import_path": "flow.integrations.erpnext.waybill_flow." + slug}
+		for slug, title, confirm, description in TOOLS
+	], enable=enable)
+	agents = bind_imported_tools(installed, enable=enable, guidance=with_replacement_guidance)
+	return {"tools": installed, "type": "Imported", "enabled": all_enabled(installed), "agents": agents}

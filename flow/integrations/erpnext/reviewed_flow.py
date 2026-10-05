@@ -135,7 +135,7 @@ def _existing(kind, token, summarize, steps):
 
 
 def _url(doc):
-    return "/app/" + frappe.scrub(doc.doctype).replace("_", "-") + "/" + quote(doc.name, safe="")
+    return "/desk/" + frappe.scrub(doc.doctype).replace("_", "-") + "/" + quote(doc.name, safe="")
 
 
 def preview(kind, request, build, summarize):

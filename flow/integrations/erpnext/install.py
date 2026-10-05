@@ -49,14 +49,17 @@ def ensure_workflow_tools(enable: bool = True):
 	# SF is one shipping provider. Its Flow wrappers stay in Flow, but they are
 	# only usable when the provider app that implements the API is installed.
 	if "erpnext_shipping" in apps:
-		from .sf_label_install import install_sf_label_tools
+		from .sf_label_install import install_sf_label_tools, install_sf_query_tools
 		from .waybill_flow_install import install_waybill_replacement_tools
 
 		result["sf_label"] = install_sf_label_tools(enable=enable)
+		result["sf_query"] = install_sf_query_tools(enable=enable)
 		result["waybill_replacement"] = install_waybill_replacement_tools(enable=enable)
 	else:
-		result["sf_label"] = {"status": "skipped", "reason": "Shipping 服务商应用尚未安装。"}
-		result["waybill_replacement"] = {"status": "skipped", "reason": "Shipping 服务商应用尚未安装。"}
+		skipped = {"status": "skipped", "reason": "Shipping 服务商应用尚未安装。"}
+		result["sf_label"] = dict(skipped)
+		result["sf_query"] = dict(skipped)
+		result["waybill_replacement"] = dict(skipped)
 
 	# PayPal is optional and must not make a normal ERPNext site fail to migrate.
 	if frappe.db.exists("DocType", "PayPal Receipt Record"):
@@ -65,6 +68,15 @@ def ensure_workflow_tools(enable: bool = True):
 		result["paypal"] = install_paypal_tool()
 	else:
 		result["paypal"] = {"status": "skipped", "reason": "PayPal 收款记录 DocType 尚未安装。"}
+
+	# Routing goes in last so it points every business agent at the tools bound above.
+	if enable:
+		from .flow_reply_style import with_daily_routing, with_reply_style
+		from .tool_install import apply_agent_guidance
+
+		result["routing"] = {
+			"agents": apply_agent_guidance(lambda text: with_reply_style(with_daily_routing(text)))
+		}
 	return {"status": "installed", "enabled": bool(enable), "workflows": result}
 
 

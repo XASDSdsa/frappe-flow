@@ -165,7 +165,7 @@ def test_all_installed_guidance_is_allowed_but_unrelated_edits_are_rejected(monk
 	from flow.integrations.erpnext import (
 		customer_install, sticker_install, sales_order_install, delivery_note_install,
 		document_submission_install, finance_flow_install, inventory_install,
-		sf_label_install, waybill_flow_install,
+		sf_label_install, waybill_flow_install, flow_reply_style,
 	)
 	snapshot = module.capture()
 	monkeypatch.setattr(module, "REQUIRED_AGENT_BINDING_SLUGS", set())
@@ -175,6 +175,7 @@ def test_all_installed_guidance_is_allowed_but_unrelated_edits_are_rejected(monk
 		document_submission_install.with_document_submission_guidance,
 		finance_flow_install.with_finance_guidance, inventory_install.with_inventory_guidance,
 		sf_label_install.with_sf_label_guidance, waybill_flow_install.with_replacement_guidance,
+		lambda text: flow_reply_style.with_reply_style(flow_reply_style.with_daily_routing(text)),
 	)
 	for transform in transforms:
 		state["Flow Agent"][0]["instructions"] = transform(state["Flow Agent"][0]["instructions"])

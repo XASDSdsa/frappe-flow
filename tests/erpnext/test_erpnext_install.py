@@ -46,9 +46,15 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": fake("document_submission")},
 		"flow.integrations.erpnext.finance_flow_install": {"install_finance_tools": fake("finance")},
 		"flow.integrations.erpnext.inventory_install": {"install_inventory_tools": fake("inventory")},
-		"flow.integrations.erpnext.sf_label_install": {"install_sf_label_tools": fake("sf_label")},
+		"flow.integrations.erpnext.sf_label_install": {
+			"install_sf_label_tools": fake("sf_label"),
+			"install_sf_query_tools": fake("sf_query"),
+		},
 		"flow.integrations.erpnext.waybill_flow_install": {"install_waybill_replacement_tools": fake("waybill")},
 		"flow.integrations.erpnext.paypal_install": {"install_paypal_tool": lambda: called.append(("paypal", True)) or {"tool": "paypal"}},
+		"flow.integrations.erpnext.tool_install": {
+			"apply_agent_guidance": lambda guidance: called.append(("routing", True)) or ["Flow"],
+		},
 	}
 	for name, values in modules.items():
 		stub = types.ModuleType(name)
@@ -61,7 +67,7 @@ def test_installer_owns_all_customer_facing_workflows(monkeypatch):
 	assert result["status"] == "installed"
 	assert [name for name, _ in called] == [
 		"customer", "sticker", "sales_order", "delivery_note",
-		"document_submission", "finance", "inventory", "sf_label", "waybill", "paypal",
+		"document_submission", "finance", "inventory", "sf_label", "sf_query", "waybill", "paypal", "routing",
 	]
 	assert all(enabled for _, enabled in called)
 
@@ -78,6 +84,7 @@ def test_provider_workflows_are_skipped_without_shipping_app(monkeypatch):
 		"flow.integrations.erpnext.document_submission_install": {"install_document_submission_tools": lambda **_: {}},
 		"flow.integrations.erpnext.finance_flow_install": {"install_finance_tools": lambda **_: {}},
 		"flow.integrations.erpnext.inventory_install": {"install_inventory_tools": lambda **_: {}},
+		"flow.integrations.erpnext.tool_install": {"apply_agent_guidance": lambda guidance: []},
 	}.items():
 		stub = types.ModuleType(module_name)
 		for name, function in functions.items():
@@ -86,4 +93,5 @@ def test_provider_workflows_are_skipped_without_shipping_app(monkeypatch):
 	result = module.ensure_workflow_tools(enable=True)
 
 	assert result["workflows"]["sf_label"]["status"] == "skipped"
+	assert result["workflows"]["sf_query"]["status"] == "skipped"
 	assert result["workflows"]["waybill_replacement"]["status"] == "skipped"

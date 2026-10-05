@@ -55,10 +55,16 @@ MANAGED_TOOL_SLUGS = {
 	"create_sf_label",
 	"get_sf_label_result",
 	"dispatch_sf_label",
+	"cancel_sf_label",
 	"preview_sf_waybill_replacement",
 	"create_sf_waybill_replacement",
 	"record_sf_waybill_replacement_feedback",
 	"activate_sf_waybill_replacement",
+	"get_sf_shipment_status",
+	"query_sf_freight",
+	"query_sf_tracking",
+	"sync_sf_tracking",
+	"lookup_sf_postcode",
 }
 REQUIRED_AGENT_BINDING_SLUGS = MANAGED_TOOL_SLUGS - {"paypal_receipt_procedure"}
 LEGACY_DISABLED_SLUGS = {
@@ -69,12 +75,18 @@ LEGACY_DISABLED_SLUGS = {
 	"recreate_sf_waybill",
 }
 OPTIONAL_TOOL_SLUGS = {"paypal_receipt_procedure"}
-SHIPPING_TOOL_SLUGS = {
+SF_LABEL_TOOL_SLUGS = {
 	"prepare_sf_label", "list_sf_label_addresses", "preview_sf_label", "create_sf_label",
-	"get_sf_label_result", "dispatch_sf_label", "preview_sf_waybill_replacement",
-	"create_sf_waybill_replacement", "record_sf_waybill_replacement_feedback",
-	"activate_sf_waybill_replacement",
+	"get_sf_label_result", "dispatch_sf_label", "cancel_sf_label",
 }
+SF_REPLACEMENT_TOOL_SLUGS = {
+	"preview_sf_waybill_replacement", "create_sf_waybill_replacement",
+	"record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement",
+}
+SF_QUERY_TOOL_SLUGS = {
+	"get_sf_shipment_status", "query_sf_freight", "query_sf_tracking", "sync_sf_tracking", "lookup_sf_postcode",
+}
+SHIPPING_TOOL_SLUGS = SF_LABEL_TOOL_SLUGS | SF_REPLACEMENT_TOOL_SLUGS | SF_QUERY_TOOL_SLUGS
 TOOL_MODULES = {
 	"customer_profile": {"create_or_reuse_customer_profile", "preview_customer_profile"},
 	"sticker_variant": {"create_customer_sticker_variant"},
@@ -86,16 +98,18 @@ TOOL_MODULES = {
 	"document_submission": {"preview_document_submission", "submit_reviewed_document"},
 	"sales_invoice_flow": {"get_sales_invoice_options", "preview_sales_invoice", "save_sales_invoice"},
 	"paypal_receipt": {"paypal_receipt_procedure"},
-	"sf_label_flow": SHIPPING_TOOL_SLUGS - {"preview_sf_waybill_replacement", "create_sf_waybill_replacement", "record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement"},
-	"waybill_flow": {"preview_sf_waybill_replacement", "create_sf_waybill_replacement", "record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement"},
+	"sf_label_flow": SF_LABEL_TOOL_SLUGS,
+	"waybill_flow": SF_REPLACEMENT_TOOL_SLUGS,
+	"flow_tools": SF_QUERY_TOOL_SLUGS,
 }
 WRITE_TOOL_SLUGS = {
 	"create_or_reuse_customer_profile", "create_customer_sticker_variant", "create_sales_order_draft",
 	"create_delivery_note_draft", "save_purchase_receipt", "save_sales_invoice", "paypal_receipt_procedure",
 	"save_purchase_order",
 	"submit_reviewed_document",
-	"create_sf_label", "dispatch_sf_label", "create_sf_waybill_replacement",
+	"create_sf_label", "dispatch_sf_label", "cancel_sf_label", "create_sf_waybill_replacement",
 	"record_sf_waybill_replacement_feedback", "activate_sf_waybill_replacement",
+	"query_sf_freight", "sync_sf_tracking",
 }
 
 # These are protected by hashes only.  Their rows are never serialized to the
@@ -344,7 +358,7 @@ def _validate_contract(snapshot):
 def _validate_preserved_metadata(snapshot):
 	"""Protect custom tools, agent settings, knowledge bindings and custom guidance."""
 	from flow.integrations.erpnext import customer_install, delivery_note_install, finance_flow_install
-	from flow.integrations.erpnext import document_submission_install, inventory_install
+	from flow.integrations.erpnext import document_submission_install, flow_reply_style, inventory_install
 	from flow.integrations.erpnext import sales_order_install, sf_label_install, sticker_install, waybill_flow_install
 
 	before = {group["doctype"]: group["rows"] for group in snapshot["flow"]}
@@ -413,6 +427,7 @@ def _validate_preserved_metadata(snapshot):
 			if "erpnext_shipping" in set(frappe.get_installed_apps()):
 				for transform in (sf_label_install.with_sf_label_guidance, waybill_flow_install.with_replacement_guidance):
 					expected = transform(expected)
+			expected = flow_reply_style.with_reply_style(flow_reply_style.with_daily_routing(expected))
 		assert actual.get("instructions") == expected, "flow_agent_guidance_changed_outside_contract:" + original["name"]
 		actual_bound = [after_slugs.get(row["tool"]) for row in after.get("Flow Agent Tool", []) if row["parent"] == original["name"]]
 		assert len(actual_bound) == len(set(actual_bound)), "duplicate_flow_agent_binding:" + original["name"]

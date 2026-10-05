@@ -5,6 +5,7 @@ import inspect
 import frappe
 
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
+from flow.integrations.erpnext.tool_install import all_enabled, bind_imported_tools, upsert_imported_tools
 
 MODULE = "inventory_flow"
 HINT_MARKER = "库存物料采购查询规则："
@@ -47,39 +48,6 @@ def tool_definitions():
 def install_inventory_tools(enable=False):
     if not frappe.db.exists("DocType", "Flow Tool"):
         return {"installed": False, "reason": "Flow 尚未安装"}
-    installed = []
-    for definition in tool_definitions():
-        values = {**definition, "type": "Imported", "code": None,
-                  "summary": definition["title"]}
-        if enable:
-            values["enabled"] = 1
-        name = frappe.db.get_value("Flow Tool", {"slug": definition["slug"]}, "name")
-        if name:
-            frappe.db.set_value("Flow Tool", name, values)
-        else:
-            doc = frappe.get_doc({"doctype": "Flow Tool", "enabled": int(enable), **values})
-            doc.insert(ignore_permissions=True)
-            name = doc.name
-        frappe.clear_document_cache("Flow Tool", name)
-        installed.append(name)
-    agents = []
-    if enable and frappe.db.exists("DocType", "Flow Agent"):
-        for title in ("Flow", "销售助理"):
-            name = frappe.db.get_value("Flow Agent", {"title": title}, "name")
-            if not name:
-                continue
-            agent = frappe.get_doc("Flow Agent", name)
-            changed = False
-            for tool_name in installed:
-                if not any(row.tool == tool_name for row in agent.get("tools") or []):
-                    agent.append("tools", {"tool": tool_name})
-                    changed = True
-            instructions = with_inventory_guidance(agent.get("instructions"))
-            if instructions != (agent.get("instructions") or ""):
-                agent.instructions = instructions
-                changed = True
-            if changed:
-                agent.save(ignore_permissions=True, ignore_version=True)
-            frappe.clear_document_cache("Flow Agent", name)
-            agents.append(name)
-    return {"tools": installed, "enabled": enable, "agents": agents}
+    installed = upsert_imported_tools(tool_definitions(), enable=enable)
+    agents = bind_imported_tools(installed, enable=enable, guidance=with_inventory_guidance)
+    return {"tools": installed, "enabled": all_enabled(installed), "agents": agents}

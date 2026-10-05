@@ -4,6 +4,7 @@
 import frappe
 
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style
+from flow.integrations.erpnext.tool_install import all_enabled, upsert_imported_tools
 
 TOOL_SLUG = "create_or_reuse_customer_profile"
 PREVIEW_SLUG = "preview_customer_profile"
@@ -228,20 +229,7 @@ def install_customer_tools(enable=False, *, configure_prerequisites=True):
         ensure_forwarder_address_type()
         ensure_sales_user_territory_creation()
         countries = prepare_country_territory_groups() if enable else []
-    installed = []
-    for values in tool_definitions():
-        slug = values.pop("slug")
-        if enable:
-            values["enabled"] = 1
-        name = frappe.db.get_value("Flow Tool", {"slug": slug}, "name")
-        if name:
-            frappe.db.set_value("Flow Tool", name, values)
-        else:
-            doc = frappe.get_doc({"doctype": "Flow Tool", "slug": slug, "enabled": int(enable), **values})
-            doc.insert(ignore_permissions=True)
-            name = doc.name
-        frappe.clear_document_cache("Flow Tool", name)
-        installed.append(name)
+    installed = upsert_imported_tools(tool_definitions(), enable=enable)
     agents = []
     candidates = frappe.get_all("Flow Agent", pluck="name") if frappe.db.exists("DocType", "Flow Agent") else []
     for name in candidates:
@@ -264,4 +252,4 @@ def install_customer_tools(enable=False, *, configure_prerequisites=True):
             agent.save(ignore_permissions=True, ignore_version=True)
         frappe.clear_document_cache("Flow Agent", name)
         agents.append(name)
-    return {"tools": installed, "type": "Imported", "enabled": bool(enable), "agents": agents, "country_groups_prepared": countries}
+    return {"tools": installed, "type": "Imported", "enabled": all_enabled(installed), "agents": agents, "country_groups_prepared": countries}

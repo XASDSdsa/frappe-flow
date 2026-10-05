@@ -370,7 +370,7 @@ def _create_sf_label(preview_token: str):
         ledger.insert(ignore_permissions=True)
         _mark(steps, stage, "queued", "运单和下单记录已保存，事务提交后后台请求顺丰；现在还没有创建成功的单号。")
         result = {"status": "queued", "verified": False, "shipment": saved.name,
-            "url": "/app/shipment/" + quote(saved.name, safe=""), "steps": steps,
+            "url": "/desk/shipment/" + quote(saved.name, safe=""), "steps": steps,
             "message": "已排队。接下来只读取结果，不能再次创建；取得单号与 PDF 后分别显示。"}
         frappe.enqueue(finish_sf_label, queue="short", timeout=300, enqueue_after_commit=True,
             job_id="flow-sf-label:" + saved.name, deduplicate=True, request_name=ledger.name)
@@ -482,7 +482,7 @@ def get_sf_label_result(shipment: str):
             _mark(steps, "address", "selected", "已保存本次地址选择。")
             _mark(steps, "review", "approved", "已保存客服批准的完整方案。")
         return {"status": status, "verified": bool(waybill) and status != "cancelled", "shipment": doc.name,
-            "waybill": waybill or None, "label_url": file_url, "url": "/app/shipment/" + quote(doc.name, safe=""),
+            "waybill": waybill or None, "label_url": file_url, "url": "/desk/shipment/" + quote(doc.name, safe=""),
             "reason": reason, "steps": steps, "next_action": "打开面单核对" if status == "ready" else
             "继续查看原运单结果；不重复创建。"}
     except Exception as exc:
@@ -555,7 +555,7 @@ def _dispatch_sf_label(shipment: str):
             raise LabelInputError("顺丰面单调用已返回，但系统回读仍不是已发货；请核对原运单，不要重复操作。", ["shipment"])
         return {"status": "dispatched", "verified": True, "shipment": saved.name,
                 "waybill": saved_waybill, "label_url": label_url or saved.get("sf_label_url"),
-                "url": "/app/shipment/" + quote(saved.name, safe=""),
+                "url": "/desk/shipment/" + quote(saved.name, safe=""),
                 "message": "已读取现有顺丰面单并确认运单已发货。后续查询物流请使用当前或历史单号。"}
     except Exception as exc:
         if dispatch_started:
@@ -577,6 +577,117 @@ def _dispatch_sf_label(shipment: str):
         return {"status": "error", "verified": False, "shipment": shipment,
                 "reason": strip_html(str(exc)),
                 "message": "发货未完成；系统没有把失败当作已发货，请按原因核对原运单。"}
+
+
+def _cancel_state(doc):
+    """Return ``(waybill, blocker, state)`` for cancelling the current SF label."""
+    from erpnext_shipping.sf_international import interception
+
+    if not shipping._is_sf_shipment(doc):
+        return "", "这不是顺丰运单，不能取消顺丰面单。", None
+    if shipping._is_cancelled(doc):
+        return "", "本地运单已取消，顺丰面单历史保持不变，无需再次取消。", None
+    waybill = str(shipping._sf_waybill(doc) or "").strip()
+    if not waybill:
+        return "", "当前运单还没有真实顺丰单号，无需取消面单。", None
+    if interception.may_cancel(doc):
+        return waybill, None, "confirmed"
+    state = str(doc.get("sf_intercept_status") or "")
+    if state == interception.CARRIER_PENDING_STATE:
+        return waybill, None, "pending"
+    if interception.requires_manual_success(doc) or state:
+        return waybill, "包裹已发出或正在拦截，不能直接取消面单；请先联系顺丰客服拦截，并在运单上记录客服反馈后再核对顺丰取消状态。", None
+    return waybill, None, "ready"
+
+
+def _cancel_confirmation(args):
+    """Build the cancellation approval from the current Shipment state."""
+    try:
+        args = args or {}
+        shipment = str(args.get("shipment") or "").strip()
+        reason = str(args.get("reason") or "").strip()
+        if not shipment:
+            return "🔴 缺少系统运单编号，不能确认取消面单。"
+        if not reason:
+            return "🔴 缺少取消原因，请拒绝后说明原因。"
+        doc = frappe.get_doc("Shipment", shipment)
+        doc.check_permission("read")
+        waybill, blocker, state = _cancel_state(doc)
+        if blocker:
+            return "🔴 " + blocker
+        requested = str(args.get("waybill") or "").strip()
+        if requested and requested != waybill:
+            return "🔴 指定单号不是这张运单的当前面单，不能取消；历史面单无需再次取消。"
+        lines = ["🔵 请确认取消顺丰面单", "",
+            "系统运单：" + doc.name, "顺丰单号：" + waybill,
+            "当前状态：" + str(doc.get("status") or "未发货"), "取消原因：" + reason, ""]
+        if state == "confirmed":
+            lines.append("顺丰已确认取消该面单，批准后只返回已有结果，不会再次请求顺丰。")
+        elif state == "pending":
+            lines.append("取消请求此前已提交，批准后只向顺丰核对取消结果，不会重复提交。")
+        else:
+            lines += ["批准后向顺丰提交取消当前面单，系统先记录“顺丰取消待确认”，不会重复提交。",
+                "只取消顺丰面单；本地运单、出库单、原单号和运费记录保留。"]
+        lines.append("包裹已交给物流时请拒绝，改为联系顺丰客服拦截。")
+        return "\n".join(lines)
+    except Exception as exc:
+        return "🔴 当前运单不能取消面单：" + strip_html(str(exc))
+
+
+def _cancel_sf_label(shipment: str, reason: str, waybill: str | None = None):
+    """After one approval, ask SF to cancel the current unshipped label.
+
+    The carrier implementation records the pending state before its external
+    call and only stores confirmation from an exact same-waybill query.  This
+    boundary checks the scenario, delegates once and reads the state back.
+    """
+    from erpnext_shipping.sf_international import interception
+    from frappe.utils import escape_html
+
+    requested = False
+    try:
+        _actor()
+        reason = str(reason or "").strip()
+        if not reason:
+            raise LabelInputError("请说明取消面单的原因。", ["reason"])
+        doc = frappe.get_doc("Shipment", shipment, for_update=True)
+        doc.check_permission("write")
+        doc.check_permission("cancel")
+        current, blocker, state = _cancel_state(doc)
+        if blocker:
+            raise LabelInputError(blocker, ["shipment"])
+        if waybill and str(waybill).strip() != current:
+            raise LabelInputError("指定单号不是这张运单的当前面单；历史面单无需再次取消。", ["waybill"])
+        url = "/desk/shipment/" + quote(doc.name, safe="")
+        if state == "confirmed":
+            return {"status": "carrier_cancelled", "verified": True, "shipment": doc.name, "waybill": current,
+                    "url": url, "message": "顺丰此前已确认取消该面单，本次没有再次请求顺丰。"}
+
+        requested = True
+        result = shipping.cancel_sf_shipment(doc.name) or {}
+        if state == "ready":
+            doc.add_comment("Comment", escape_html("Flow 申请取消顺丰面单 " + current + "，原因：" + reason))
+        saved = frappe.get_doc("Shipment", doc.name)
+        saved.check_permission("read")
+        if str(shipping._sf_waybill(saved) or "").strip() != current:
+            raise LabelInputError("取消后当前顺丰单号发生变化，未确认本次结果；请核对原运单历史。", ["shipment"])
+        if interception.may_cancel(saved):
+            return {"status": "carrier_cancelled", "verified": True, "shipment": saved.name, "waybill": current,
+                    "url": url, "message": "顺丰已确认取消面单，原单号和运费记录保留；本地运单仍需另行处理。"
+                    "包裹未发出需要重新下单时，用换单流程 preview_sf_waybill_replacement。"}
+        pending = saved.get("sf_intercept_status") == interception.CARRIER_PENDING_STATE
+        return {"status": "pending" if pending else "not_confirmed", "verified": False,
+                "shipment": saved.name, "waybill": current, "url": url,
+                "message": strip_html(str(result.get("message") or ""))
+                or "顺丰尚未明确确认取消；系统未重复提交，请稍后再次核对。"}
+    except Exception as exc:
+        if requested:
+            return {"status": "uncertain", "verified": False, "shipment": shipment,
+                    "reason": strip_html(str(exc)),
+                    "message": "取消请求可能已经提交，当前结果待核对；请稍后再次核对，系统不会重复提交取消。"}
+        return {"status": "needs_input" if isinstance(exc, LabelInputError) else "error",
+                "verified": False, "shipment": shipment, "reason": strip_html(str(exc)),
+                "message": "面单未取消；请按原因处理，原运单和面单历史保持不变。"}
 
 
 def _confirmation_prompt(args):
@@ -619,3 +730,5 @@ create_sf_label = tool(_create_sf_label, name="create_sf_label", requires_confir
                       confirm_prompt=_confirmation_prompt)
 dispatch_sf_label = tool(_dispatch_sf_label, name="dispatch_sf_label", requires_confirmation=True,
                          confirm_prompt=_dispatch_confirmation)
+cancel_sf_label = tool(_cancel_sf_label, name="cancel_sf_label", requires_confirmation=True,
+                       confirm_prompt=_cancel_confirmation)

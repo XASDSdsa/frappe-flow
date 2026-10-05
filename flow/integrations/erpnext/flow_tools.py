@@ -225,10 +225,21 @@ def get_sf_shipment_status(
 	sales_order: Annotated[str | None, "销售订单号，仅定位已有运单"] = None,
 	delivery_note: Annotated[str | None, "出库单编号"] = None,
 ) -> dict:
-	"""只读查看当前或历史顺丰面单及已保存轨迹、费用和PDF；不请求承运商。
+	"""只读查看当前或历史顺丰面单，以及系统已保存的轨迹、运费和 PDF。
 
-	具体旧单号传waybill，结果保留该单号。仅传系统运单或订单时同时列出可读的面单历史，
-	让客服明确选择。订单尚无运单时使用get_delivery_note_options准备出库。
+	### 参数与默认值
+
+	- `shipment`、`waybill`、`delivery_note`、`sales_order` 任选其一定位；用户给了具体顺丰单号就传 `waybill`。
+
+	### 返回与下一步
+
+	- 指定 `waybill` 时只返回该单号，并标注当前面单或历史面单。
+	- 只给运单、出库单或订单时同时列出可读的面单历史；有多张历史面单须让客服选择，不默认最新一条。
+	- 需要承运商最新轨迹用 `query_sf_tracking`，需要运费账单用 `query_sf_freight`。
+
+	### 限制
+
+	- 不请求顺丰、不写入系统。订单尚无运单时改用 `get_delivery_note_options` 准备出库。
 	"""
 	rows = []
 	for target in _query_targets(shipment, waybill, sales_order, delivery_note):
@@ -251,14 +262,25 @@ def query_sf_freight(
 	shipment: Annotated[str | None, "系统运单编号"] = None,
 	waybill: Annotated[str | None, "要查询的明确当前或历史顺丰单号"] = None,
 	sales_order: Annotated[str | None, "销售订单编号，仅定位已有运单"] = None,
+	delivery_note: Annotated[str | None, "出库单编号，仅定位已有运单"] = None,
 ) -> dict:
-	"""按明确的当前或历史面单同步运费账单，保留原生批准。
+	"""批准后向顺丰同步明确面单的运费账单，并按现有结算规则保存。
 
-	指定旧号不会改查当前号。当前面单沿用现有结算记账规则；历史账单单独保存并交财务核对，
-	不覆盖当前面单费用。没有结算账单不代表历史费用可删除。
+	### 参数与默认值
+
+	- `shipment`、`waybill`、`delivery_note`、`sales_order` 任选其一定位；查询历史面单必须传该 `waybill`。
+
+	### 返回与下一步
+
+	- 每张面单单独返回运费结果，并标注当前面单或历史面单。
+	- 当前面单沿用现有结算记账规则；历史账单单独保存并交财务核对。
+
+	### 限制
+
+	- 会写入运费记录，保留一次原生批准。指定旧号不会改查当前号，不覆盖当前面单费用；没有结算账单不代表历史费用可删除。
 	"""
 	out = []
-	for target in _query_targets(shipment, waybill, sales_order):
+	for target in _query_targets(shipment, waybill, sales_order, delivery_note):
 		if target["waybill_record"]:
 			result = _waybill_api().fetch_waybill_freight(target["shipment"], target["waybill_record"])
 		else:
@@ -272,10 +294,25 @@ def query_sf_tracking(
 	shipment: Annotated[str | None, "系统运单编号"] = None,
 	waybill: Annotated[str | None, "要查询的明确当前或历史顺丰单号"] = None,
 	sales_order: Annotated[str | None, "销售订单编号，仅定位已有运单"] = None,
+	delivery_note: Annotated[str | None, "出库单编号，仅定位已有运单"] = None,
 ) -> dict:
-	"""只读查询明确面单的完整物流轨迹，不改写 Shipment 或历史面单。"""
+	"""只读向顺丰查询明确面单的完整物流轨迹。
+
+	### 参数与默认值
+
+	- `shipment`、`waybill`、`delivery_note`、`sales_order` 任选其一定位；查询历史面单必须传该 `waybill`。
+
+	### 返回与下一步
+
+	- 返回顺丰轨迹和已保存历史，并标注当前面单或历史面单。
+	- 用户要求把最新轨迹保存回系统时，再调用 `sync_sf_tracking`。
+
+	### 限制
+
+	- 不改写运单或历史面单，无需批准。
+	"""
 	out = []
-	for target in _query_targets(shipment, waybill, sales_order):
+	for target in _query_targets(shipment, waybill, sales_order, delivery_note):
 		if target["waybill_record"]:
 			tracking = _waybill_api().fetch_waybill_tracking_readonly(target["shipment"], target["waybill_record"])
 		else:
@@ -289,10 +326,24 @@ def sync_sf_tracking(
 	shipment: Annotated[str | None, "系统运单编号"] = None,
 	waybill: Annotated[str | None, "要同步的明确当前或历史顺丰单号"] = None,
 	sales_order: Annotated[str | None, "销售订单编号，仅定位已有运单"] = None,
+	delivery_note: Annotated[str | None, "出库单编号，仅定位已有运单"] = None,
 ) -> dict:
-	"""获批准后查询并保存明确面单的最新物流轨迹。"""
+	"""批准后向顺丰查询并保存明确面单的最新物流轨迹。
+
+	### 参数与默认值
+
+	- `shipment`、`waybill`、`delivery_note`、`sales_order` 任选其一定位；同步历史面单必须传该 `waybill`。
+
+	### 返回与下一步
+
+	- 返回已保存的最新轨迹，`persisted=true` 表示已写回对应运单或历史面单。
+
+	### 限制
+
+	- 会写入系统，保留一次原生批准；只看轨迹时用只读的 `query_sf_tracking`。
+	"""
 	out = []
-	for target in _query_targets(shipment, waybill, sales_order):
+	for target in _query_targets(shipment, waybill, sales_order, delivery_note):
 		if target["waybill_record"]:
 			tracking = _waybill_api().fetch_waybill_tracking(target["shipment"], target["waybill_record"])
 		else:
@@ -363,10 +414,23 @@ def recreate_sf_waybill(
 
 @tool
 def lookup_sf_postcode(
-	country_code: Annotated[str, "ISO country code, e.g. US or CN"],
-	post_code: Annotated[str, "Postal code to look up"],
+	country_code: Annotated[str, "两位国家代码，例如 US 或 CN"],
+	post_code: Annotated[str, "要反查的邮编"],
 ) -> dict:
-	"""Look up SF International province/city/county matches for a country + postcode. Does not save."""
+	"""按国家和邮编向顺丰反查可用的省州、城市、区县。
+
+	### 参数与默认值
+
+	- `country_code` 为两位国家代码；`post_code` 为客户档案或客服给出的邮编。
+
+	### 返回与下一步
+
+	- 返回顺丰实际候选；创建面单时改用 `prepare_sf_label`，由它自动反查并让客服选择地址。
+
+	### 限制
+
+	- 只读，不保存地址、不创建面单；不能编造或补全接口未返回的地区。
+	"""
 	shipping = _shipping()
 	rows = shipping.lookup_sf_postcode(country_code, post_code) or []
 	return {"count": len(rows), "matches": rows}
@@ -374,7 +438,7 @@ def lookup_sf_postcode(
 
 TOOL_TITLES = {
 	"get_sf_shipment_status": "查询顺丰运单",
-	"query_sf_freight": "查询顺丰运费",
+	"query_sf_freight": "同步顺丰运费账单",
 	"query_sf_tracking": "查询顺丰轨迹",
 	"sync_sf_tracking": "同步并保存顺丰轨迹",
 	"print_sf_label": "打印顺丰面单",

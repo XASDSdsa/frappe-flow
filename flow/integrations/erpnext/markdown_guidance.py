@@ -30,6 +30,7 @@ def description_definitions():
     definitions.extend(customer_install.tool_definitions())
     definitions.extend(finance_flow_install.tool_definitions())
     definitions.extend(inventory_install.tool_definitions())
+    definitions.extend(sf_label_install.query_tool_definitions())
     for module, path in (
         (sales_order_install, "sales_order_flow"),
         (delivery_note_install, "delivery_note_flow"),
