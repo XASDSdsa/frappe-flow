@@ -544,7 +544,7 @@ def _resolve(request):
         "customer", "items", "company", "currency", "delivery_date", "delivery_days", "stickers_free", "sticker_mappings", "include_stickers", "base_date", "bundle_mappings", "customization_services")})
 
 
-def _first_order_sticker_review(summary, confirmed=False):
+def _first_order_sticker_review(summary, confirmed=False, fast_notice=None):
     """Read-only advice, separate from the order fingerprint and monetary review.
 
     Drafts count as existing orders; cancelled orders do not. Permission-filtered
@@ -559,6 +559,9 @@ def _first_order_sticker_review(summary, confirmed=False):
     else:
         if orders:
             return None
+        if fast_notice:
+            return {"title": "首单贴纸提醒", "display_mode": "review_notice", "requires_input": False,
+                    "message": fast_notice}
         basis = "当前账号未查到该客户未取消的历史订单，按首单处理。"
     selected = any(row["row_type"] in {"bundle", "sticker", "standalone_sticker"} for row in summary["items"])
     if confirmed:
@@ -571,8 +574,12 @@ def _first_order_sticker_review(summary, confirmed=False):
             "message": basis + choice + "制作服务免费也保留0元服务行，收费按约定金额；不增加第二次确认。"}
 
 
-def _first_order_question(resolved):
-    """One consolidated first-order question, asked before any approval card exists."""
+def _first_order_question(resolved, include_stickers=False):
+    """One consolidated first-order question, asked before any approval card exists.
+
+    A customer with no sticker versions and no sticker request skips the question.
+    The approval card then carries one sentence instead.
+    """
     customer = resolved["customer"]["name"]
     try:
         if frappe.get_list("Sales Order", filters={"customer": customer, "docstatus": ["!=", 2]},
@@ -587,8 +594,16 @@ def _first_order_question(resolved):
                 for row in resolved["items"] if row["row_type"] in {"bundle", "sticker", "standalone_sticker"}]
     services = [{"item_code": row["item_code"], "rate": row.get("rate")}
                 for row in resolved["items"] if row["row_type"] == "service"]
-    return {**options, "selected_stickers": selected, "selected_services": services,
-            "question": "首单请确认：1. 配哪个贴纸版本，或不配；2. 制作服务选哪项、收多少（免费填0，不涉及就不加）。"}
+    wants_stickers = bool(include_stickers or selected)
+    if not options["stickers"] and not wants_stickers:
+        notice = ("该客户没有贴纸，本单不配贴纸；制作服务见服务行。" if services else
+                  "该客户没有贴纸，本单不配贴纸、不收制作费。")
+        return {"fast_path": True, "notice": notice, "stickers": [], "services": options["services"],
+                "selected_stickers": [], "selected_services": services}
+    question = ("该客户还没有贴纸。要配贴纸需先建贴纸物料；不配贴纸请说明，并确认制作费。"
+                if not options["stickers"] else
+                "首单请确认：1. 配哪个贴纸版本，或不配；2. 制作服务选哪项、收多少（免费填0，不涉及就不加）。")
+    return {**options, "selected_stickers": selected, "selected_services": services, "question": question}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):
@@ -648,7 +663,9 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         if resolved["status"] != "ready":
             _mark(steps, "inputs", "needs_input", "；".join(issue["message"] for issue in resolved["issues"]))
             return {**resolved, "verified": False, "steps": steps}
-        if not first_order_confirmed and (choices := _first_order_question(resolved)):
+        choices = _first_order_question(resolved, request.get("include_stickers"))
+        fast_notice = choices.get("notice") if choices and choices.get("fast_path") else None
+        if choices and not fast_notice and not first_order_confirmed:
             _mark(steps, "inputs", "needs_input", choices["question"])
             return {"status": "needs_input", "verified": False, "steps": steps, "missing": ["first_order_confirmed"],
                     "issues": [{"code": "first_order_choices_required", "field": "first_order_confirmed",
@@ -669,7 +686,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         # The same reviewed request receives the same key even when two preview
         # workers race. Explicit second-order intent gets a distinct identity.
         token = uuid.uuid4().hex if new_order else fingerprint[:32]
-        sticker_service_review = _first_order_sticker_review(summary, confirmed=first_order_confirmed)
+        sticker_service_review = _first_order_sticker_review(summary, confirmed=first_order_confirmed, fast_notice=fast_notice)
         plan = {"version": VERSION, "user": user, "scope": scope, "site": frappe.local.site,
                 "request": request, "resolved": resolved, "summary": summary, "bundles": bundles, "fingerprint": fingerprint,
                 "sticker_service_review": sticker_service_review,

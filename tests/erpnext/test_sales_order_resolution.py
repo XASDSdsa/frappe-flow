@@ -157,6 +157,8 @@ def test_quantities_are_positive_finite_and_representable(h, qty):
 
 def test_exact_item_customer_names_and_document_permissions(h):
 	assert h.call(customer="Exact Customer", items=[{"item_name": "Driven25 绿色", "qty": 1}])["status"] == "ready"
+	assert h.call(customer="exact customer")["customer"]["name"] == "CUST-1"
+	h.data["Customer"]["CUST-2"] = Doc(name="CUST-2", customer_name="EXACT CUSTOMER", disabled=0)
 	assert "customer_not_found" in codes(h.call(customer="exact customer"))
 	assert "item_not_found" in codes(h.call(items=[{"item_code": "green", "qty": 1}]))
 	assert "item_not_found" in codes(h.call(items=[{"item_name": "Driven25", "qty": 1}]))
@@ -573,6 +575,11 @@ def test_shorthand_is_not_applied_to_other_colors_partial_names_or_item_codes(h)
 	h.item("EXTRA", item_name="山东中性绿方加强版")
 	for values in [{"item_name": "山东白方"}, {"item_name": "绿方"}, {"item_name": "山东绿方"}, {"item_code": "山东绿方"}]:
 		assert "item_not_found" in codes(h.call(items=[{**values, "qty": 120}]))
+	h.item("BLUE", item_name="山东中性蓝方", attributes=[])
+	h.item("NEUTRAL-GREEN", item_name="山东中性绿方", attributes=[])
+	result = h.call(items=[{"item_name": "山东绿方", "qty": 120}, {"item_name": "蓝方", "qty": 40}])
+	assert result["status"] == "ready"
+	assert [row["item_code"] for row in result["product_rows"]] == ["NEUTRAL-GREEN", "BLUE"]
 
 
 def test_existing_matching_rows_are_consumed_once_and_keep_original_indexes(h):

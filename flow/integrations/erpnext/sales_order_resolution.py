@@ -21,6 +21,7 @@ SERVICE_FIELDS = PRODUCT_FIELDS - {"standalone", "is_free_item"}
 MAPPING_FIELDS = (PRODUCT_FIELDS - {"standalone", "is_free_item"}) | {"product_row", "sticker_model", "sticker_version"}
 BUNDLE_MAPPING_FIELDS = {"product_row", "sticker_row"}
 PRODUCT_SHORTHANDS = {f"山东{color}方" for color in "绿灰蓝粉"}
+BARE_COLOR_SQUARES = {f"{color}方" for color in "绿灰蓝粉"}
 STANDALONE_STICKER_WARNING = (
 	"本单含独立交付的客户专属贴纸，未绑定配套商品。请在本次整体审核中重点核对客户、型号版本、数量及用途；"
 	"贴纸售价统一为 0 元，后续出库仍需真实库存和成本。如向客户收取一次性定制费，应另列定制服务费。无需另行确认。"
@@ -119,11 +120,38 @@ def _item_choices(field, value):
 	return choices
 
 
+def _casefold_names(doctype, field, value, extra=None):
+	rows = frappe.get_all(doctype, filters={field: value, **(extra or {})},
+		fields=list(dict.fromkeys(["name", field])), limit_page_length=0)
+	return [row["name"] for row in rows if str(row.get(field) or "").casefold() == value.casefold()]
+
+
+def _with_series_shorthand(items):
+	"""Bare 蓝方 follows 山东 only when the same order already names that series."""
+	names = [values.get("item_name").strip() for values in items
+		if isinstance(values, dict) and isinstance(values.get("item_name"), str)]
+	if not any(name in PRODUCT_SHORTHANDS for name in names):
+		return items
+	rewritten = []
+	for values in items:
+		name = values.get("item_name").strip() if isinstance(values, dict) and isinstance(values.get("item_name"), str) else ""
+		if isinstance(values, dict) and not values.get("item_code") and name in BARE_COLOR_SQUARES:
+			values = {**values, "item_name": "山东" + name}
+		rewritten.append(values)
+	return rewritten
+
+
 def _customer(value, issues):
 	value = _text(value, "customer", issues, required=True)
 	if not value:
 		return None
 	names = _exact_names("Customer", "name", value) or _exact_names("Customer", "customer_name", value)
+	if len(names) != 1:
+		folded = _casefold_names("Customer", "name", value, {"disabled": 0}) or _casefold_names(
+			"Customer", "customer_name", value, {"disabled": 0})
+		readable = [name for name in dict.fromkeys(folded) if _readable("Customer", name)]
+		if len(readable) == 1:
+			names = readable
 	if len(names) != 1:
 		_issue(issues, "ambiguous_customer" if names else "customer_not_found", "customer",
 			"客户名称不唯一，请选择明确的客户编号。" if names else "没有找到完全匹配的客户，请从候选中选择客户编号。",
@@ -559,6 +587,7 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 	if not isinstance(items, list) or not items:
 		_issue(issues, "missing_items", "items", "请提供至少一行商品及数量。")
 		items = []
+	items = _with_series_shorthand(items)
 	product_rows, standalone_sticker_rows, input_rows, product_docs = [], [], [], {}
 	sticker_customer_checked = False
 	for index, values in enumerate(items, 1):
