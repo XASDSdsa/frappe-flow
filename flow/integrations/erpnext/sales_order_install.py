@@ -46,6 +46,7 @@ HINT = (
 - 服务数量默认 `1`，免费单价默认 `0`；收费时必须传约定单价，不从物料名称中的 500/1000 等数字推断。
 - 未提服务不传 `customization_services`；只复用已有贴纸不代表再次定制，不自动新增服务。
 - 无法确认服务物料时，一次说明真实缺项，禁止随意取第一个服务物料。
+- `first_order_choices.services` 就是制作服务清单。提问时照抄其中的 `item_name`，不要改写成“贴纸制作服务”这类统称。
 - 复购先问要不要贴纸，并核对库存。库存够用时不主动加制作服务；库存不够或没有对应贴纸时，必须问制作服务，客服确认后才按免费或收费列行。首单不论库存和有没有贴纸档案，都要问制作服务，不得用“复购不收制作费”解释首单。
 - 贴纸仍有真实采购成本和库存；服务售价为 0 不代表采购成本为 0，也不重新记入已入账成本。
 - 贴纸制作计划或定制服务费不增加库存，必须等实际生产到货后走采购收货。
@@ -55,7 +56,9 @@ HINT = (
 - 预检返回 `first_order_choices` 时还没有批准卡片。不论客服本轮有没有提到贴纸，都先用短表格问完，得到答复后才传 `first_order_confirmed=true`。不得自行把该参数设为 true。
 - 首单（`order_kind=first`，或无法判断的 `unknown`）：有没有贴纸档案都要问。1. 要不要贴纸、用哪个版本；没有档案又要贴纸时先建贴纸物料，不出单。2. 要不要制作服务、选哪项、收多少。`services` 带 `reference_prices`，只作提示，金额以客服回答为准。免费传 `rate=0`，不需要就不传 `customization_services`。
 - 复购（`order_kind=repeat`）：先问要不要贴纸。表格列出每种贴纸的 `on_hand`（仓库现存量）、`needed_qty`（本单对应颜色数量）和 `enough`。`stock_short=true` 或 `missing_colors` 有值时，库存不够，必须同时问制作服务。库存够用且客服没有要求新做时，不加制作服务。
-- 提问保持简短，不附长篇规则说明。客服答复后按回答传 `sticker_mappings` 或 `include_stickers`，再带 `first_order_confirmed=true` 重新预检。批准卡片只显示一行已确认结果。
+- 提问保持简短，不附长篇规则说明。制作服务有多项时，表格里逐项列出 `services` 的原名。客服只说了免费或收费、还没点名哪一项时，用这张已有清单让客服选；这一轮不要预检，不要调用 `get_item_options`、`find` 或 `read`。
+- 客服点名之后再预检。`customization_services` 的 `item_code` 或 `item_name` 必须与 `services` 里某一项完全一致，`rate` 用客服确认的金额。返回 `service_choice_required` 时，只把该 issue 的 `choices` 列给客服选，不要说系统没有这项服务，也不要再搜物料。
+- 客服答复后按回答传 `sticker_mappings` 或 `include_stickers`，再带 `first_order_confirmed=true` 重新预检。批准卡片只显示一行已确认结果。
 - 不自动添加未确认的贴纸或服务。
 
 ### 商品与贴纸组合
@@ -193,7 +196,7 @@ TOOLS = (
 ### 返回与下一步
 
 - 返回真正缺项、歧义候选、完整订单摘要及 `preview_token`；客户或商品未匹配时 issue 带 `choices` 候选。
-- 确认前一律返回 `first_order_choices`，不出令牌。首单问要不要贴纸、要不要制作服务。复购问要不要贴纸，并给出 `on_hand`、`needed_qty`、`enough`；`stock_short` 时同时问制作服务。客服答复后传 `first_order_confirmed=true` 才出令牌。
+- 确认前一律返回 `first_order_choices`，不出令牌。首单问要不要贴纸、要不要制作服务。制作服务选项照抄 `services` 的原名；客服还没选定哪一项时不要预检、不要再查物料。复购问要不要贴纸，并给出 `on_hand`、`needed_qty`、`enough`；`stock_short` 时同时问制作服务。客服答复后传 `first_order_confirmed=true` 才出令牌。`service_choice_required` 的 `choices` 就是这些服务，直接让客服选。
 - 无权读取历史订单时返回 `sticker_service_review` 说明，随整单审核。
 - 已有订单按复购处理，沿用已确认贴纸版本；库存不足只提示后续必须补货，不将订单误报为可发货。
 - 组合在一次整体批准后复用或创建，不另外建组合库存。

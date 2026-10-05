@@ -407,10 +407,8 @@ def _choice(item, customer):
 		**_catalog_details(item, customer)}
 
 
-def first_order_options(customer):
-	"""Saved sticker versions and readable sticker-making services for one first-order question."""
-	doc = frappe.get_doc("Customer", customer)
-	stickers = [_choice(item, doc) for item in _sticker_catalog(doc, [])]
+def _making_services():
+	"""The same sticker-making services already shown on the first-order question."""
 	services = []
 	for row in frappe.get_all("Item", filters={"disabled": 0, "has_variants": 0, "is_sales_item": 1, "is_stock_item": 0,
 		"item_name": ["like", "%贴纸%"]}, fields=["name", "item_name"], limit_page_length=50):
@@ -422,7 +420,14 @@ def first_order_options(customer):
 		services.append({"item_code": row["name"], "item_name": row.get("item_name"),
 			"reference_prices": [{"price_list": p.get("price_list"), "currency": p.get("currency"),
 				"rate": float(p.get("price_list_rate") or 0)} for p in prices]})
-	return {"stickers": stickers, "services": services[:10]}
+	return services[:10]
+
+
+def first_order_options(customer):
+	"""Saved sticker versions and readable sticker-making services for one first-order question."""
+	doc = frappe.get_doc("Customer", customer)
+	stickers = [_choice(item, doc) for item in _sticker_catalog(doc, [])]
+	return {"stickers": stickers, "services": _making_services()}
 
 
 def _color_mark(text):
@@ -692,6 +697,12 @@ def resolve_order_inputs(customer, items, company=None, currency=None, delivery_
 		rate = _number(values.get("rate", 0), field + ".rate", issues, allow_zero=True)
 		item = _item(values, field, issues)
 		if not item:
+			for issue in reversed(issues):
+				if issue.get("field") == field and issue.get("code") == "item_not_found":
+					issue.update(code="service_choice_required",
+						message="请从下列已列出的制作服务中选择，不要另造名称，也不要再查物料列表。",
+						choices=_making_services())
+					break
 			continue
 		if (item.get("is_stock_item") or item.get("variant_of") == STICKER_TEMPLATE
 			or item.name == STICKER_TEMPLATE or item.name.startswith(STICKER_TEMPLATE + "-")):
