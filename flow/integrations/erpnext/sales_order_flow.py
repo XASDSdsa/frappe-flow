@@ -111,7 +111,7 @@ def _order_sticker(code, customer_name, cache):
 
 
 def _order_detail_table(currency, items):
-	"""Markdown table: one row per order line, bundle components indented below it."""
+	"""Markdown table: one row per order line; bundles split into product and sticker columns."""
 	def cell(value):
 		return str(value or "").replace("|", "／").replace("\n", " ").strip()
 
@@ -121,28 +121,30 @@ def _order_detail_table(currency, items):
 	def money(value):
 		return f"{value:,.2f}"
 
-	def label(row):
-		sticker = row.get("sticker")
-		if sticker:
-			return f"贴纸：{sticker['customer']} · {sticker['sticker_model']} · {sticker['sticker_version']}"
-		return row.get("item_name") or row.get("item_code")
+	def name(part, row):
+		sticker = part.get("sticker")
+		text = (f"{sticker['customer']} · {sticker['sticker_model']} · {sticker['sticker_version']}"
+			if sticker else part.get("item_name") or part.get("item_code"))
+		# Components normally match the line quantity; only show it when it differs.
+		if part is not row and (part["qty"] != row["qty"] or part["uom"] != row["uom"]):
+			text += f" ×{qty(part['qty'], part['uom'])}"
+		return text
 
-	delivered = any(row["delivered_qty"] for row in items)
-	header = ["行", "商品", "数量", f"单价（{currency}）", f"金额（{currency}）"] + (["已出库"] if delivered else [])
+	def is_sticker(part):
+		return bool(part.get("sticker")) or str(part.get("item_code") or "").startswith(STICKER_TEMPLATE + "-")
+
+	header = ["行", "商品", "贴纸（客户 · 型号 · 版本）", "数量", f"单价（{currency}）", f"金额（{currency}）"]
 	lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
 	for row in items:
-		name = label(row) + ("（组合）" if row.get("components") else "")
+		parts = row.get("components") or [row]
+		products = "、".join(name(part, row) for part in parts if not is_sticker(part)) or "—"
+		stickers = "、".join(name(part, row) for part in parts if is_sticker(part)) or "—"
+		amount = qty(row["qty"], row["uom"])
+		if row["delivered_qty"]:
+			amount += f"（已出库 {row['delivered_qty']:g}）"
 		rate = "免费" if row["is_free_item"] else money(row["rate"])
-		values = [row["row_no"], name, qty(row["qty"], row["uom"]), rate, money(row["amount"])]
-		if delivered:
-			values.append(qty(row["delivered_qty"], row["uom"]))
+		values = [row["row_no"], products, stickers, amount, rate, money(row["amount"])]
 		lines.append("| " + " | ".join(cell(value) for value in values) + " |")
-		for component in row.get("components") or []:
-			kind = "" if component.get("sticker") else "巧克粉／商品："
-			values = ["└", kind + label(component), qty(component["qty"], component["uom"]), "—", "—"]
-			if delivered:
-				values.append("")
-			lines.append("| " + " | ".join(cell(value) for value in values) + " |")
 	return "\n".join(lines)
 
 
