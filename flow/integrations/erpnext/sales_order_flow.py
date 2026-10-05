@@ -544,7 +544,7 @@ def _resolve(request):
         "customer", "items", "company", "currency", "delivery_date", "delivery_days", "stickers_free", "sticker_mappings", "include_stickers", "base_date", "bundle_mappings", "customization_services")})
 
 
-def _first_order_sticker_review(summary):
+def _first_order_sticker_review(summary, confirmed=False):
     """Read-only advice, separate from the order fingerprint and monetary review.
 
     Drafts count as existing orders; cancelled orders do not. Permission-filtered
@@ -555,16 +555,44 @@ def _first_order_sticker_review(summary):
                                  fields=["name"], limit_page_length=1)
     except frappe.PermissionError:
         basis = "无权读取历史订单，无法确认是否首单。"
+        confirmed = False
     else:
         if orders:
             return None
-        basis = "当前账号未查到该客户未取消的历史订单，按首单提醒。"
+        basis = "当前账号未查到该客户未取消的历史订单，按首单处理。"
     selected = any(row["row_type"] in {"bundle", "sticker", "standalone_sticker"} for row in summary["items"])
+    if confirmed:
+        services = [row["item_code"] for row in summary["items"] if row["row_type"] == "service"]
+        return {"title": "首单已确认", "display_mode": "review_notice", "requires_input": False,
+                "message": basis + "客服已确认：" + ("配客户贴纸，见明细" if selected else "不配客户贴纸") + "；" +
+                           ("贴纸制作服务 " + "、".join(services) + "，见服务行" if services else "不收贴纸制作服务") + "。"}
     choice = ("本单已选择贴纸：请核对对应商品、贴纸型号／版本和数量。" if selected else
               "本单未列贴纸：请在整单审核时确认是否需要客户贴纸。")
     return {"title": "首单贴纸提醒", "display_mode": "review_notice", "requires_input": False,
             "message": basis + "\n" + choice +
             "\n贴纸售价固定为0元；本次已确认提供的定制服务必须列入订单，免费也保留0元服务行，收费按约定金额。复用旧贴纸不代表新定制。此提醒随整单审核，不增加第二次确认，不自动添加未确认的贴纸、组合产品或服务。"}
+
+
+def _first_order_question(resolved):
+    """One consolidated first-order question, asked before any approval card exists."""
+    customer = resolved["customer"]["name"]
+    try:
+        if frappe.get_list("Sales Order", filters={"customer": customer, "docstatus": ["!=", 2]},
+                           fields=["name"], limit_page_length=1):
+            return None
+    except frappe.PermissionError:
+        return None
+    from .sales_order_resolution import first_order_options
+    options = first_order_options(customer)
+    selected = [{"item_code": row["item_code"], "sticker_model": row.get("sticker_model"),
+                 "sticker_version": row.get("sticker_version"), "product_item_code": row.get("product_item_code")}
+                for row in resolved["items"] if row["row_type"] in {"bundle", "sticker", "standalone_sticker"}]
+    services = [{"item_code": row["item_code"], "rate": row.get("rate")}
+                for row in resolved["items"] if row["row_type"] == "service"]
+    return {**options, "selected_stickers": selected, "selected_services": services,
+            "question": "该客户是首单（当前账号未查到未取消的历史订单）。请一次确认：1. 是否配客户贴纸、用哪个型号版本"
+                        "（见 stickers；没有合适版本需先建贴纸）；2. 贴纸制作服务：不涉及、免费（保留0元服务行）"
+                        "或收费（选 services 中的物料并约定金额）。"}
 
 
 def _error(exc, steps, stage, *, rolled_back=False):
@@ -584,7 +612,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
                         stickers_free: bool = True, sticker_mappings: list[dict] | None = None,
                         warehouse: str = "", price_list: str = "", remarks: str = "", new_order: bool = False,
                         bundle_mappings: list[dict] | None = None,
-                        customization_services: list[dict] | None = None):
+                        customization_services: list[dict] | None = None, first_order_confirmed: bool = False):
     """集中预检订单，无需批准。items 用 item_code 或完整 item_name、qty，可选 uom。
 
     用户要求配客户贴纸时 include_stickers=true；按实际物理件数一件一张。
@@ -595,7 +623,9 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
     bundle_mappings=[{product_row:1,sticker_row:2}]明确同单搭配，均为原items行号。
     独立/备用贴纸行传standalone=true。组合需一颗巧克粉一张贴纸，歧义集中询问。
     没提到贴纸不自动添加。预检不保留物料或单据写入，批准一次后创建/复用原生产品组合。
-    当前账号未查到客户未取消历史订单时，整体审核卡片提醒选择贴纸服务；无权核实会明确说明。
+    客户或商品未精确匹配时 issues 带 choices 候选。首单（当前账号未查到未取消历史订单）先返回 first_order_choices：
+    客户已有贴纸 stickers、贴纸制作服务 services；问一次贴纸和服务，按回答传参并加 first_order_confirmed=true 重新预检。
+    客服已明确说明首单贴纸和服务时可直接传 true。无权核实历史订单时随审核卡片说明。
     业务顺序：先客户档案，再客户贴纸物料，最后销售订单。交期默认自然日七天后当天23:59。
     不要求提供本人姓名、邮箱或销售员。默认创建草稿。new_order 仅用于用户明确要求另开相同新单。
     """
@@ -609,19 +639,26 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
             raise frappe.PermissionError("当前账号没有创建销售订单的权限，请管理员处理销售订单权限。")
         if not isinstance(items, list) or len(items) > 100 or (sticker_mappings and len(sticker_mappings) > 100) or (bundle_mappings and len(bundle_mappings) > 100):
             raise OrderInputError("一次订单最多支持 100 行商品及 100 行贴纸，请分单处理。", ["items"])
-        if type(new_order) is not bool or not isinstance(remarks, str) or len(remarks) > 4000:
-            raise OrderInputError("订单说明最长 4000 字，另开新单标记必须为布尔值。")
+        if type(new_order) is not bool or type(first_order_confirmed) is not bool or not isinstance(remarks, str) or len(remarks) > 4000:
+            raise OrderInputError("订单说明最长 4000 字，另开新单和首单确认标记必须为布尔值。")
         request = {"customer": customer, "items": items, "company": company or None, "currency": currency or None,
                    "delivery_date": delivery_date or None, "delivery_days": delivery_days, "include_stickers": include_stickers,
                    "stickers_free": stickers_free, "sticker_mappings": sticker_mappings,
                    "bundle_mappings": bundle_mappings,
                    "customization_services": customization_services,
                    "warehouse": warehouse or None, "price_list": price_list or None,
-                   "remarks": remarks, "base_date": nowdate()}
+                   "remarks": remarks, "first_order_confirmed": first_order_confirmed, "base_date": nowdate()}
         resolved = _resolve(request)
         if resolved["status"] != "ready":
             _mark(steps, "inputs", "needs_input", "；".join(issue["message"] for issue in resolved["issues"]))
             return {**resolved, "verified": False, "steps": steps}
+        if not first_order_confirmed and (choices := _first_order_question(resolved)):
+            _mark(steps, "inputs", "needs_input", choices["question"])
+            return {"status": "needs_input", "verified": False, "steps": steps, "missing": ["first_order_confirmed"],
+                    "issues": [{"code": "first_order_choices_required", "field": "first_order_confirmed",
+                                "message": choices["question"]}],
+                    "first_order_choices": choices,
+                    "message": "首单需先确认贴纸和贴纸制作服务；确认后带 first_order_confirmed=true 重新预检，再出批准卡片。"}
         _mark(steps, "inputs", "passed", "已核对当前登录人和唯一启用销售员，客户、商品、贴纸归属与数量有效。")
         stage = "pricing"
         doc, resolved, bundles = _build_reviewed_order(resolved, request, touched=touched)
@@ -636,7 +673,7 @@ def preview_sales_order(customer: str, items: list[dict], company: str = "", cur
         # The same reviewed request receives the same key even when two preview
         # workers race. Explicit second-order intent gets a distinct identity.
         token = uuid.uuid4().hex if new_order else fingerprint[:32]
-        sticker_service_review = _first_order_sticker_review(summary)
+        sticker_service_review = _first_order_sticker_review(summary, confirmed=first_order_confirmed)
         plan = {"version": VERSION, "user": user, "scope": scope, "site": frappe.local.site,
                 "request": request, "resolved": resolved, "summary": summary, "bundles": bundles, "fingerprint": fingerprint,
                 "sticker_service_review": sticker_service_review,

@@ -87,6 +87,38 @@ def _exact_names(doctype, field, value):
 	) if row.get(field) == value]
 
 
+def _readable(doctype, name):
+	try:
+		frappe.get_doc(doctype, name).check_permission("read")
+		return True
+	except (frappe.PermissionError, frappe.DoesNotExistError):
+		return False
+
+
+def _customer_choices(value):
+	"""Readable enabled customers containing the typed text; never auto-selected."""
+	found = {}
+	for field in ("name", "customer_name"):
+		for row in frappe.get_all("Customer", filters={field: ["like", f"%{value}%"], "disabled": 0},
+			fields=["name", "customer_name"], limit_page_length=10):
+			found.setdefault(row["name"], row)
+	return [{"customer": name, "customer_name": row.get("customer_name")}
+		for name, row in list(found.items())[:10] if _readable("Customer", name)]
+
+
+def _item_choices(field, value):
+	"""Readable enabled sales items containing the typed text, excluding generated bundles."""
+	choices = []
+	for row in frappe.get_all("Item", filters={field: ["like", f"%{value}%"], "disabled": 0, "has_variants": 0,
+		"is_sales_item": 1}, fields=["name", "item_name"], limit_page_length=30):
+		if row["name"].startswith("FLOW-COMBO-") or not _readable("Item", row["name"]):
+			continue
+		choices.append({"item_code": row["name"], "item_name": row.get("item_name")})
+		if len(choices) == 10:
+			break
+	return choices
+
+
 def _customer(value, issues):
 	value = _text(value, "customer", issues, required=True)
 	if not value:
@@ -94,7 +126,8 @@ def _customer(value, issues):
 	names = _exact_names("Customer", "name", value) or _exact_names("Customer", "customer_name", value)
 	if len(names) != 1:
 		_issue(issues, "ambiguous_customer" if names else "customer_not_found", "customer",
-			"客户名称不唯一，请选择明确的客户编号。" if names else "没有找到完全匹配的客户，请核对客户编号或完整名称。")
+			"客户名称不唯一，请选择明确的客户编号。" if names else "没有找到完全匹配的客户，请从候选中选择客户编号。",
+			choices=[{"customer": name} for name in names] if names else _customer_choices(value))
 		return None
 	doc = _read("Customer", names[0], "customer", issues)
 	if doc and doc.get("disabled"):
@@ -198,7 +231,8 @@ def _item(values, field, issues, *, allow_product_shorthand=False):
 	names = _exact_names("Item", "name" if code else "item_name", code or name)
 	if len(names) != 1:
 		_issue(issues, "ambiguous_item" if names else "item_not_found", field,
-			"商品名称不唯一，请选择具体商品。" if names else "没有找到完全匹配的商品，请选择完整名称或编码。")
+			"商品名称不唯一，请选择具体商品。" if names else "没有找到完全匹配的商品，请从候选中选择商品编码。",
+			choices=[{"item_code": item} for item in names] if names else _item_choices("name" if code else "item_name", code or name))
 		return None
 	doc = _read("Item", names[0], field, issues)
 	if not doc:
@@ -343,6 +377,20 @@ def _sticker_catalog(customer, issues):
 def _choice(item, customer):
 	return {"item_code": item.name, "item_name": item.get("item_name"),
 		**_catalog_details(item, customer)}
+
+
+def first_order_options(customer):
+	"""Saved sticker versions and readable sticker-making services for one first-order question."""
+	doc = frappe.get_doc("Customer", customer)
+	stickers = [_choice(item, doc) for item in _sticker_catalog(doc, [])]
+	services = []
+	for row in frappe.get_all("Item", filters={"disabled": 0, "has_variants": 0, "is_sales_item": 1, "is_stock_item": 0,
+		"item_name": ["like", "%贴纸%"]}, fields=["name", "item_name"], limit_page_length=50):
+		if (row["name"].startswith("FLOW-COMBO-") or frappe.db.exists("Product Bundle", {"new_item_code": row["name"]})
+			or not _readable("Item", row["name"])):
+			continue
+		services.append({"item_code": row["name"], "item_name": row.get("item_name")})
+	return {"stickers": stickers, "services": services[:10]}
 
 
 def _product_sticker_model(item):
