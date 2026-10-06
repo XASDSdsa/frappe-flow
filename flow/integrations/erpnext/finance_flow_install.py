@@ -6,7 +6,7 @@ import frappe
 from flow.integrations.erpnext.flow_reply_style import with_managed_guidance, with_reply_style, without_managed_guidance
 from flow.integrations.erpnext.tool_install import all_enabled, bind_imported_tools, upsert_imported_tools
 
-MODULES = ('purchase_order_flow', 'purchase_receipt_flow', 'sales_invoice_flow')
+MODULES = ('purchase_order_flow', 'purchase_receipt_flow', 'sticker_receipt_flow', 'sales_invoice_flow')
 HINT_MARKER = '采购开票工具规则：'
 LEGACY_HINT_MARKER = '采购开票与贴纸利润工具规则：'
 HINT = (HINT_MARKER + (
@@ -15,14 +15,14 @@ HINT = (HINT_MARKER + (
     '### 业务顺序\n'
     '\n'
     '- 业务顺序固定为客户档案、客户贴纸物料、客户在外部付款并确认需求、销售订单草稿、订单提交、PayPal真实交易号登记，再按实际贴纸到货办理采购入库，库存满足后出库和物流；当前PayPal专用工具要求已提交销售订单，不能伪造无订单预收款，也不能为了出库伪造采购成本或到货。\n'
-    '- 采购先用preview_purchase_order→save_purchase_order创建采购订单；到货再用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt；开票用get_sales_invoice_options→preview_sales_invoice→save_sales_invoice。\n'
+    '- 采购先用preview_purchase_order→save_purchase_order创建采购订单；普通供应商到货再用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt；客户贴纸已生产并实际到货、且成本已在定制服务中承担时，改用get_sticker_receipt_options→preview_sticker_receipt→save_sticker_receipt，写入原生Stock Entry/Material Receipt，不填写供应商或采购价；开票用get_sales_invoice_options→preview_sales_invoice→save_sales_invoice。\n'
     '\n'
     '### 参数与真实成本\n'
     '\n'
     '- 缺项集中询问一次，沿用本轮已知资料，不重复要求账号；默认仓库大坪仓库 - LEYA并在审核卡列出。\n'
     '- 采购必须真实供应商、数量和采购价，成本不从售价或客户定制费猜测；只有用户明确实际已到货并要求提交才用actual_receipt=true、submit=true。\n'
-    '- 用户明确贴纸服务成本已另行入账、本次须零成本入库，或明确免费取得时，采购收货可传rate=0及zero_valuation_reason，原因沿用用户说明，不重复追问，不把未知成本当0。\n'
-    '- 零成本只增加实际库存数量，不重复计入已记账服务成本；在原生整单审核卡醒目展示原因和数量，无需另一次确认。\n'
+    '- 普通采购收货必须真实供应商、数量和采购价；客户贴纸服务成本已另行入账时，不再伪造供应商或把贴纸当采购收货，使用贴纸到货工具并提供zero_valuation_reason。\n'
+    '- 贴纸零成本到货只增加实际库存数量，不重复计入已记账服务成本；审核卡醒目展示销售订单、客户、原因和数量，无需另一次确认。\n'
     '- 复购同一贴纸版本不重复添加定制服务费，只有新一批确有实际成本时才新增一次费用。\n'
     '\n'
     '### 开票与整体批准\n'

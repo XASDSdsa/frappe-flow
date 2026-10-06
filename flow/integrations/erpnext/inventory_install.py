@@ -20,7 +20,7 @@ HINT = (
     '\n'
     '### 采购入库与限制\n'
     '\n'
-    '- 采购收货继续使用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt，只有实际到货且成本已明确才提交入库；用户明确贴纸服务成本已另行入账或免费取得时，沿用该说明传rate=0及zero_valuation_reason，不把未知成本当0、不重复计入服务成本。\n'
+    '- 普通供应商采购收货继续使用get_purchase_receipt_options→preview_purchase_receipt→save_purchase_receipt，只有实际到货且成本已明确才提交入库；客户贴纸已生产并实际到货、成本已另行入账或免费取得时，使用get_sticker_receipt_options→preview_sticker_receipt→save_sticker_receipt，走原生Stock Entry/Material Receipt，固定零估值，不填写供应商，不把未知成本当0。\n'
     '- 草稿不增加库存，采购收货不会自动付款或开票。\n'
     '- 库存查询是只读动作，不要求客服确认；所有采购写入仍由原生采购单据和一次审核负责。'
 )
