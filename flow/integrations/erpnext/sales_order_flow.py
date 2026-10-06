@@ -826,15 +826,17 @@ def _approval_unit(row):
 
 
 def _approval_label(row, bundle_actions):
-    label = row["item_name"]
     if row["row_type"] == "bundle":
         action = "复用" if bundle_actions.get(row["item_code"]) == "reuse" else "新建"
-        label = f"{row['item_name']}（{action}，贴 {row['sticker_item_name']}）"
-    elif row["row_type"] in {"sticker", "standalone_sticker"}:
+        product = row.get("product_item_name") or row["item_name"]
+        identity = "/".join(str(row.get(key)) for key in ("sticker_model", "sticker_version") if row.get(key))
+        sticker = f"贴纸（{identity}）" if identity else "客户贴纸"
+        return f"{product}＋{sticker}（{action}）"
+    if row["row_type"] in {"sticker", "standalone_sticker"}:
         identity = "/".join(str(row.get(key)) for key in ("sticker_model", "sticker_version") if row.get(key))
         if identity:
-            label = f"{row['item_name']}（{identity}）"
-    return label
+            return f"客户贴纸（{identity}）"
+    return row["item_name"]
 
 
 def _confirmation_prompt(args):
