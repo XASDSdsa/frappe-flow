@@ -21,6 +21,7 @@ TTL = 1800
 KINDS = {
     "purchase_order": "Purchase Order",
     "purchase_receipt": "Purchase Receipt",
+    "sticker_receipt": "Stock Entry",
     "sales_invoice": "Sales Invoice",
 }
 
