@@ -9,7 +9,12 @@ def paypal_receipt_procedure(
     transaction_id: str, reference_date: str, customer: str = "",
     currency: str = "USD", dry_run: bool = False,
 ):
-    """登记已人工确认到账的 PayPal 美元订单预收款；只读预检不写入。"""
+    """登记已人工确认到账的 PayPal 美元订单预收款；只读预检不写入。
+
+    返回结果中的 actual_receipt_currency/actual_receipt_note 是实际 PayPal 收款币种；
+    company_base_currency/base_currency_note 只是 ERP 总账折算币种。展示时必须分开，
+    不得把公司本位币写成实际收到的币种，也不得暗示发生换汇或提现。
+    """
     from erpnext.accounts.doctype.payment_entry.paypal_receipt import (
         paypal_receipt_procedure as register_receipt,
     )
