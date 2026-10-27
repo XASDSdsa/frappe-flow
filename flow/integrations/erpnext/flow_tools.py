@@ -140,7 +140,7 @@ def _waybill_api():
 	return waybill
 
 
-def _query_targets(shipment=None, waybill=None, sales_order=None, delivery_note=None):
+def _query_targets(shipment=None, waybill=None, sales_order=None, delivery_note=None, *, allow_external=False):
 	"""Resolve exact carrier identities for queries, never for lifecycle mutations."""
 	shipment = (shipment or "").strip()
 	waybill = (waybill or "").strip()
@@ -158,6 +158,10 @@ def _query_targets(shipment=None, waybill=None, sales_order=None, delivery_note=
 			names = [exact.shipment]
 		else:
 			rows = frappe.get_all("Shipment", or_filters={"shipment_id": waybill, "awb_number": waybill}, fields=["name"], limit_page_length=2)
+			if not rows and allow_external and not any((shipment, sales_order, delivery_note)):
+				frappe.has_permission("Shipment", "read", throw=True)
+				return [{"shipment": None, "waybill": waybill, "waybill_record": None,
+					"is_current": False, "label_scope": "外部面单", "record": None}]
 			if len(rows) != 1:
 				frappe.throw("没有找到唯一且可核对的物流面单，请确认单号。")
 			names = [rows[0].name]
@@ -260,28 +264,38 @@ def get_sf_shipment_status(
 @tool(requires_confirmation=True)
 def query_sf_freight(
 	shipment: Annotated[str | None, "系统运单编号"] = None,
-	waybill: Annotated[str | None, "要查询的明确当前或历史顺丰单号"] = None,
+	waybill: Annotated[str | None, "要查询的具体顺丰单号，支持系统内当前、历史及系统外单号"] = None,
 	sales_order: Annotated[str | None, "销售订单编号，仅定位已有运单"] = None,
 	delivery_note: Annotated[str | None, "出库单编号，仅定位已有运单"] = None,
 ) -> dict:
-	"""批准后向顺丰同步明确面单的运费账单，并按现有结算规则保存。
+	"""批准后向顺丰查询具体单号的运费账单；系统内面单按现有结算规则保存。
 
 	### 参数与默认值
 
 	- `shipment`、`waybill`、`delivery_note`、`sales_order` 任选其一定位；查询历史面单必须传该 `waybill`。
+	- 系统外单号只传 `waybill`，无需先创建运单或面单；使用已配置的顺丰账号查询，账单访问权限由顺丰校验。
 
 	### 返回与下一步
 
-	- 每张面单单独返回运费结果，并标注当前面单或历史面单。
+	- 每张面单单独返回运费结果，并标注当前面单、历史面单或外部面单。
 	- 当前面单沿用现有结算记账规则；历史账单单独保存并交财务核对。
+	- 外部面单只返回查询结果，`persisted=false`，不创建本地单据或记账；未查到账单不代表运费为零。
 
 	### 限制
 
-	- 会写入运费记录，保留一次原生批准。指定旧号不会改查当前号，不覆盖当前面单费用；没有结算账单不代表历史费用可删除。
+	- 系统内面单会写入运费记录，保留一次原生批准。指定旧号不会改查当前号，不覆盖当前面单费用；没有结算账单不代表历史费用可删除。
 	"""
 	out = []
-	for target in _query_targets(shipment, waybill, sales_order, delivery_note):
-		if target["waybill_record"]:
+	for target in _query_targets(shipment, waybill, sales_order, delivery_note, allow_external=True):
+		if not target["shipment"]:
+			shipping = _shipping()
+			payload = shipping.query_case_orders(target["waybill"])
+			amount, currency, records = shipping._sum_pay_amount(payload)
+			result = {"ok": True, "found": amount is not None, "amount": amount,
+				"currency": currency, "records": records, "persisted": False,
+				"query_status": "查询成功" if amount is not None else "本次未查到账单",
+				"message": "已取得顺丰账单，本次只查询，未创建本地单据或记账。" if amount is not None else "顺丰本次未返回该单号的账单，不代表运费为零。"}
+		elif target["waybill_record"]:
 			result = _waybill_api().fetch_waybill_freight(target["shipment"], target["waybill_record"])
 		else:
 			result = _shipping().fetch_sf_freight(target["shipment"])
